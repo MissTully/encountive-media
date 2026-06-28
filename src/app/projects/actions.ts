@@ -54,6 +54,29 @@ export async function addAssetsToProject(
   revalidatePath(`/projects/${projectId}`);
 }
 
+/** Queue a carousel content request for a project (picked up by n8n Workflow C). */
+export async function createContentRequest(
+  projectId: string,
+  formData: FormData,
+) {
+  const topic = String(formData.get("topic") ?? "").trim();
+  const brief = String(formData.get("brief") ?? "").trim();
+  const targetPlatform = String(formData.get("target_platform") ?? "").trim();
+  if (!topic && !brief) return;
+
+  const supabase = await createClient();
+  const { error } = await supabase.from("content_requests").insert({
+    project_id: projectId,
+    topic: topic || null,
+    brief: brief || null,
+    target_platform: targetPlatform || null,
+    status: "queued",
+  });
+  if (error) throw new Error(error.message);
+
+  revalidatePath(`/projects/${projectId}`);
+}
+
 /** Remove a single asset from a project board. */
 export async function removeAssetFromProject(
   projectId: string,

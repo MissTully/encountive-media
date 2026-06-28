@@ -2,9 +2,16 @@ import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 import { getProfile } from "@/lib/auth";
 import { createClient } from "@/lib/supabase/server";
-import { removeAssetFromProject } from "../actions";
+import { removeAssetFromProject, createContentRequest } from "../actions";
 
 export const dynamic = "force-dynamic";
+
+const REQUEST_STATUS_STYLES: Record<string, string> = {
+  queued: "bg-zinc-200 text-zinc-700 dark:bg-zinc-800 dark:text-zinc-300",
+  generating: "bg-blue-100 text-blue-700 dark:bg-blue-950 dark:text-blue-300",
+  in_review: "bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300",
+  approved: "bg-green-100 text-green-700 dark:bg-green-950 dark:text-green-300",
+};
 
 interface BoardAsset {
   id: string;
@@ -48,6 +55,12 @@ export default async function ProjectBoardPage({
       return { ...a, url: data?.signedUrl ?? null };
     }),
   );
+
+  const { data: requests } = await supabase
+    .from("content_requests")
+    .select("id, topic, target_platform, status, created_at")
+    .eq("project_id", id)
+    .order("created_at", { ascending: false });
 
   return (
     <div className="flex flex-1 flex-col items-center bg-zinc-50 font-sans dark:bg-black">
@@ -129,6 +142,76 @@ export default async function ProjectBoardPage({
             ))}
           </ul>
         )}
+
+        <section className="flex flex-col gap-4 border-t border-zinc-200 pt-8 dark:border-zinc-800">
+          <h2 className="text-lg font-semibold text-zinc-900 dark:text-zinc-100">
+            Carousels
+          </h2>
+
+          <form
+            action={createContentRequest.bind(null, id)}
+            className="flex flex-col gap-3 rounded-xl border border-zinc-200 bg-white p-4 dark:border-zinc-800 dark:bg-zinc-950"
+          >
+            <input
+              type="text"
+              name="topic"
+              placeholder="Topic (e.g. 5 tips for faster onboarding)"
+              className="rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm text-zinc-900 outline-none focus:border-zinc-500 dark:border-zinc-700 dark:bg-zinc-950 dark:text-zinc-100"
+            />
+            <textarea
+              name="brief"
+              rows={3}
+              placeholder="Brief — what should this carousel say, and to whom?"
+              className="rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm text-zinc-900 outline-none focus:border-zinc-500 dark:border-zinc-700 dark:bg-zinc-950 dark:text-zinc-100"
+            />
+            <div className="flex items-center justify-between gap-3">
+              <select
+                name="target_platform"
+                defaultValue="instagram"
+                className="rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm text-zinc-900 dark:border-zinc-700 dark:bg-zinc-950 dark:text-zinc-100"
+              >
+                <option value="instagram">Instagram</option>
+                <option value="linkedin">LinkedIn</option>
+                <option value="facebook">Facebook</option>
+                <option value="twitter">X / Twitter</option>
+              </select>
+              <button
+                type="submit"
+                className="rounded-full bg-zinc-900 px-5 py-2 text-sm font-medium text-white hover:bg-zinc-700 dark:bg-zinc-100 dark:text-zinc-900 dark:hover:bg-zinc-300"
+              >
+                Queue carousel
+              </button>
+            </div>
+          </form>
+
+          {requests && requests.length > 0 && (
+            <ul className="flex flex-col gap-2">
+              {requests.map((r) => (
+                <li key={r.id}>
+                  <Link
+                    href={`/projects/${id}/requests/${r.id}`}
+                    className="flex items-center justify-between gap-4 rounded-lg border border-zinc-200 bg-white px-4 py-3 hover:border-zinc-300 dark:border-zinc-800 dark:bg-zinc-950 dark:hover:border-zinc-700"
+                  >
+                    <span className="truncate text-sm text-zinc-800 dark:text-zinc-200">
+                      {r.topic || "Untitled carousel"}
+                      {r.target_platform ? (
+                        <span className="text-zinc-400"> · {r.target_platform}</span>
+                      ) : null}
+                    </span>
+                    <span
+                      className={`shrink-0 rounded-full px-2 py-0.5 text-[10px] font-medium ${
+                        REQUEST_STATUS_STYLES[r.status] ??
+                        REQUEST_STATUS_STYLES.queued
+                      }`}
+                    >
+                      {r.status}
+                    </span>
+                  </Link>
+                </li>
+              ))}
+            </ul>
+          )}
+        </section>
       </main>
     </div>
   );
