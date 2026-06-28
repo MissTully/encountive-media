@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
 import { hasSupabaseConfig } from "@/lib/env";
 import { signOut } from "@/app/auth/actions";
@@ -92,6 +93,22 @@ export default async function Home() {
             library, AI-written copy, and editable text rendered over clean
             visuals. Built multi-tenant from day one.
           </p>
+          {email && (
+            <nav className="flex gap-3">
+              <Link
+                href="/upload"
+                className="rounded-full bg-zinc-900 px-4 py-2 text-sm font-medium text-white hover:bg-zinc-700 dark:bg-zinc-100 dark:text-zinc-900 dark:hover:bg-zinc-300"
+              >
+                Upload images
+              </Link>
+              <Link
+                href="/library"
+                className="rounded-full border border-zinc-300 px-4 py-2 text-sm font-medium text-zinc-800 hover:bg-zinc-100 dark:border-zinc-700 dark:text-zinc-200 dark:hover:bg-zinc-800"
+              >
+                Asset library
+              </Link>
+            </nav>
+          )}
         </header>
 
         <section
