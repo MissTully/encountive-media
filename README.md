@@ -76,9 +76,9 @@ docs/                  # build specification
 ## Build roadmap
 
 1. ✅ Scaffold app + Supabase client setup
-2. Database schema — tables, pgvector, RLS, `match_assets`
-3. Bulk image upload
-4. Vision auto-titling + embeddings (n8n Workflow A)
+2. ✅ Database schema — tables, pgvector, RLS, `match_assets`
+3. ✅ Bulk image upload + auth (Google OAuth)
+4. ✅ Vision auto-titling + embeddings ([n8n Workflow A](docs/n8n-workflow-a.md))
 5. Asset library with keyword + semantic search
 6. Projects & boards (Workflow B)
 7. Carousel generation with reuse priority + Creatomate render (Workflow C)
