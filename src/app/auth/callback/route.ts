@@ -11,6 +11,23 @@ export async function GET(request: NextRequest) {
   // Where to land after sign-in; defaults to the home page.
   const next = searchParams.get("next") ?? "/";
 
+  // Redirect to the error page, carrying a human-readable reason so failures
+  // are diagnosable without digging through server logs.
+  const errorRedirect = (reason?: string | null) => {
+    const url = new URL("/auth/auth-code-error", origin);
+    if (reason) url.searchParams.set("error", reason);
+    return NextResponse.redirect(url);
+  };
+
+  // Instead of a `code`, the provider (via Supabase) can redirect back with an
+  // error — e.g. a misconfigured Google client ID/secret in the Supabase
+  // dashboard surfaces here as `error_description`.
+  const providerError =
+    searchParams.get("error_description") ?? searchParams.get("error");
+  if (providerError) {
+    return errorRedirect(providerError);
+  }
+
   if (code) {
     const supabase = await createClient();
     const { error } = await supabase.auth.exchangeCodeForSession(code);
@@ -25,8 +42,9 @@ export async function GET(request: NextRequest) {
       }
       return NextResponse.redirect(`${origin}${next}`);
     }
+    return errorRedirect(error.message);
   }
 
-  // Something went wrong — show an error page.
-  return NextResponse.redirect(`${origin}/auth/auth-code-error`);
+  // No code and no error param — nothing we can do with this request.
+  return errorRedirect(null);
 }
