@@ -31,6 +31,24 @@ npm run dev
 Open <http://localhost:3000>. The landing page shows whether your Supabase
 environment is detected and tracks the build roadmap.
 
+## Authentication (Google OAuth)
+
+Sign-in uses Supabase Auth with the Google provider. On first sign-in a
+`profiles` row is auto-created (DB trigger) linking the user to the Encountive
+organization. One-time setup outside the codebase:
+
+1. **Google Cloud Console** → APIs & Services → Credentials → create an
+   **OAuth client ID** (type: Web application). Add this Authorized redirect URI:
+   `https://lbbotfsgkqddzzshmwvw.supabase.co/auth/v1/callback`
+2. **Supabase dashboard** → Authentication → Providers → **Google**: enable it
+   and paste the Google **Client ID** and **Client secret**.
+3. **Supabase dashboard** → Authentication → URL Configuration: set the **Site
+   URL** and add **Redirect URLs** for both `http://localhost:3000/**` and your
+   Vercel domain `https://<your-app>.vercel.app/**`.
+4. (Recommended for an internal tool) restrict who can sign in — Supabase Auth
+   lets you limit allowed email domains or disable new sign-ups. Otherwise any
+   Google account that completes sign-in is added to the Encountive org.
+
 ## Project structure
 
 ```

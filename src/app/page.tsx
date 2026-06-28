@@ -1,14 +1,17 @@
+import { createClient } from "@/lib/supabase/server";
 import { hasSupabaseConfig } from "@/lib/env";
+import { signOut } from "@/app/auth/actions";
 
 const PHASES = [
   {
     title: "Scaffold & auth",
-    detail: "Next.js + Tailwind + Supabase client; seed one org and profile.",
+    detail: "Next.js + Tailwind + Supabase; Google sign-in with auto profiles.",
     done: true,
   },
   {
     title: "Database schema",
     detail: "Tables, pgvector, RLS policies, and the match_assets function.",
+    done: true,
   },
   {
     title: "Bulk upload",
@@ -36,16 +39,51 @@ const PHASES = [
   },
 ];
 
-export default function Home() {
+export default async function Home() {
   const configured = hasSupabaseConfig();
+
+  // When configured, the proxy guarantees a signed-in user here. Look up their
+  // email and organization for the header.
+  let email: string | null = null;
+  let orgName: string | null = null;
+  if (configured) {
+    const supabase = await createClient();
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+    email = user?.email ?? null;
+    if (user) {
+      const { data: profile } = await supabase
+        .from("profiles")
+        .select("organizations(name)")
+        .eq("id", user.id)
+        .single();
+      orgName = profile?.organizations?.name ?? null;
+    }
+  }
 
   return (
     <div className="flex flex-1 flex-col items-center bg-zinc-50 font-sans dark:bg-black">
       <main className="flex w-full max-w-3xl flex-1 flex-col gap-10 px-6 py-16 sm:px-10">
         <header className="flex flex-col gap-3">
-          <span className="text-xs font-medium uppercase tracking-widest text-zinc-500">
-            Encountive
-          </span>
+          <div className="flex items-center justify-between gap-4">
+            <span className="text-xs font-medium uppercase tracking-widest text-zinc-500">
+              Encountive{orgName ? ` · ${orgName}` : ""}
+            </span>
+            {email && (
+              <div className="flex items-center gap-3 text-sm text-zinc-600 dark:text-zinc-400">
+                <span className="hidden sm:inline">{email}</span>
+                <form action={signOut}>
+                  <button
+                    type="submit"
+                    className="rounded-full border border-zinc-300 px-3 py-1 text-xs font-medium hover:bg-zinc-100 dark:border-zinc-700 dark:hover:bg-zinc-800"
+                  >
+                    Sign out
+                  </button>
+                </form>
+              </div>
+            )}
+          </div>
           <h1 className="text-4xl font-semibold tracking-tight text-zinc-900 dark:text-zinc-50">
             Content Studio
           </h1>
