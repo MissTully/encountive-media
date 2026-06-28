@@ -77,6 +77,39 @@ export async function createContentRequest(
   revalidatePath(`/projects/${projectId}`);
 }
 
+/** Approve a carousel that's in review (human approval before publishing). */
+export async function approveRequest(requestId: string, projectId: string) {
+  const supabase = await createClient();
+  const { error } = await supabase
+    .from("content_requests")
+    .update({ status: "approved" })
+    .eq("id", requestId);
+  if (error) throw new Error(error.message);
+  revalidatePath(`/projects/${projectId}/requests/${requestId}`);
+}
+
+/** Send a carousel back for regeneration (Workflow C will pick it up again). */
+export async function requeueRequest(requestId: string, projectId: string) {
+  const supabase = await createClient();
+  const { error } = await supabase
+    .from("content_requests")
+    .update({ status: "queued" })
+    .eq("id", requestId);
+  if (error) throw new Error(error.message);
+  revalidatePath(`/projects/${projectId}/requests/${requestId}`);
+}
+
+/** Re-open an approved carousel for another review. */
+export async function reopenRequest(requestId: string, projectId: string) {
+  const supabase = await createClient();
+  const { error } = await supabase
+    .from("content_requests")
+    .update({ status: "in_review" })
+    .eq("id", requestId);
+  if (error) throw new Error(error.message);
+  revalidatePath(`/projects/${projectId}/requests/${requestId}`);
+}
+
 /** Remove a single asset from a project board. */
 export async function removeAssetFromProject(
   projectId: string,

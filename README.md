@@ -82,6 +82,6 @@ docs/                  # build specification
 5. ✅ Asset library with keyword + semantic search
 6. ✅ Projects & boards (Workflow B)
 7. 🚧 Carousel generation — content-request flow + copy/board-reuse ([Workflow C](docs/n8n-workflow-c.md)) done; semantic reuse, image-gen, and Creatomate render pending
-8. Review / approval screen
+8. ✅ Review / approval screen
 
 Build and test one phase before moving to the next.

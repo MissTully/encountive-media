@@ -2,6 +2,11 @@ import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 import { getProfile } from "@/lib/auth";
 import { createClient } from "@/lib/supabase/server";
+import {
+  approveRequest,
+  requeueRequest,
+  reopenRequest,
+} from "../../../actions";
 
 export const dynamic = "force-dynamic";
 
@@ -110,6 +115,54 @@ export default async function RequestDetailPage({
             </p>
           )}
         </header>
+
+        {request.status === "in_review" && slides.length > 0 && (
+          <div className="flex items-center gap-3 rounded-xl border border-amber-300 bg-amber-50 px-4 py-3 dark:border-amber-900 dark:bg-amber-950">
+            <span className="flex-1 text-sm text-amber-900 dark:text-amber-300">
+              Review the slides below, then approve or send back for changes.
+            </span>
+            <form action={requeueRequest.bind(null, requestId, id)}>
+              <button
+                type="submit"
+                className="rounded-full border border-zinc-300 bg-white px-4 py-1.5 text-sm font-medium text-zinc-800 hover:bg-zinc-100 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-200 dark:hover:bg-zinc-800"
+              >
+                Request changes
+              </button>
+            </form>
+            <form action={approveRequest.bind(null, requestId, id)}>
+              <button
+                type="submit"
+                className="rounded-full bg-green-600 px-4 py-1.5 text-sm font-medium text-white hover:bg-green-700"
+              >
+                Approve
+              </button>
+            </form>
+          </div>
+        )}
+
+        {request.status === "approved" && (
+          <div className="flex items-center gap-3 rounded-xl border border-green-300 bg-green-50 px-4 py-3 dark:border-green-900 dark:bg-green-950">
+            <span className="flex-1 text-sm font-medium text-green-800 dark:text-green-300">
+              ✓ Approved — ready to publish.
+            </span>
+            <form action={reopenRequest.bind(null, requestId, id)}>
+              <button
+                type="submit"
+                className="rounded-full border border-zinc-300 bg-white px-4 py-1.5 text-sm font-medium text-zinc-800 hover:bg-zinc-100 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-200 dark:hover:bg-zinc-800"
+              >
+                Re-open
+              </button>
+            </form>
+          </div>
+        )}
+
+        {(request.status === "queued" || request.status === "generating") && (
+          <div className="rounded-xl border border-blue-300 bg-blue-50 px-4 py-3 text-sm text-blue-800 dark:border-blue-900 dark:bg-blue-950 dark:text-blue-300">
+            {request.status === "queued"
+              ? "Queued — the generation workflow will write the slides shortly."
+              : "Generating slides…"}
+          </div>
+        )}
 
         {slides.length === 0 ? (
           <div className="rounded-xl border border-dashed border-zinc-300 py-16 text-center text-zinc-600 dark:border-zinc-700 dark:text-zinc-400">
