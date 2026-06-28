@@ -71,7 +71,10 @@ export default async function RequestDetailPage({
           bgUrl = data?.signedUrl ?? null;
         }
         let renderUrl: string | null = null;
-        if (s.render_path) {
+        if (s.render_path?.startsWith("http")) {
+          // Creatomate returns a hosted CDN URL; use it directly.
+          renderUrl = s.render_path;
+        } else if (s.render_path) {
           const { data } = await supabase.storage
             .from("renders")
             .createSignedUrl(s.render_path, 3600);

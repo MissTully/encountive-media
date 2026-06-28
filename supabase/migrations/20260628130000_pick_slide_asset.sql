@@ -10,7 +10,7 @@ create or replace function public.pick_slide_asset(
   p_project_id     uuid,
   match_threshold  float
 )
-returns table (asset_id uuid, similarity float, from_board boolean)
+returns table (asset_id uuid, storage_path text, similarity float, from_board boolean)
 language sql
 stable
 set search_path = public
@@ -19,7 +19,7 @@ as $$
     select org_id from public.projects where id = p_project_id
   ),
   board as (
-    select a.id, 1 - (a.embedding <=> query_embedding) as sim
+    select a.id, a.storage_path, 1 - (a.embedding <=> query_embedding) as sim
     from public.project_assets pa
     join public.assets a on a.id = pa.asset_id
     where pa.project_id = p_project_id
@@ -27,22 +27,22 @@ as $$
     order by a.embedding <=> query_embedding limit 1
   ),
   lib as (
-    select a.id, 1 - (a.embedding <=> query_embedding) as sim
+    select a.id, a.storage_path, 1 - (a.embedding <=> query_embedding) as sim
     from public.assets a
     where a.org_id = (select org_id from org)
       and a.status = 'ready' and a.embedding is not null
     order by a.embedding <=> query_embedding limit 1
   ),
   choice as (
-    select b.id, b.sim, true as fb from board b where b.sim > match_threshold
+    select b.id, b.storage_path, b.sim, true as fb from board b where b.sim > match_threshold
     union all
-    select l.id, l.sim, false from lib l
+    select l.id, l.storage_path, l.sim, false from lib l
     where l.sim > match_threshold
       and not exists (select 1 from board b where b.sim > match_threshold)
   )
-  select id, sim, fb from choice
+  select id, storage_path, sim, fb from choice
   union all
-  select null::uuid, null::float, false where not exists (select 1 from choice)
+  select null::uuid, null::text, null::float, false where not exists (select 1 from choice)
   limit 1;
 $$;
 
