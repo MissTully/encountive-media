@@ -81,7 +81,7 @@ docs/                  # build specification
 4. ✅ Vision auto-titling + embeddings ([n8n Workflow A](docs/n8n-workflow-a.md))
 5. ✅ Asset library with keyword + semantic search
 6. ✅ Projects & boards (Workflow B)
-7. 🚧 Carousel generation — content-request flow + copy/board-reuse ([Workflow C](docs/n8n-workflow-c.md)) done; semantic reuse, image-gen, and Creatomate render pending
+7. ✅ Carousel generation — copy + reuse (board→library) + Creatomate render ([Workflow C](docs/n8n-workflow-c.md)); image-gen fallback + render persistence are optional follow-ups
 8. ✅ Review / approval screen
 
 Build and test one phase before moving to the next.

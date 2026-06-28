@@ -63,17 +63,37 @@ a nurse-simulation request matched every slide to the relevant board image at
   `$json.asset_id` is undefined.
 - **Thinking model truncation:** see `thinkingBudget: 0` note above.
 
-## Not yet implemented (next iterations)
+## Rendering (Creatomate)
 
-Copy generation and **reuse-aware selection (board → library)** are done. Remaining:
+After each slide is inserted, the workflow renders a finished image:
+
+```
+Insert Slide
+  → Sign Background URL   (HTTP: Supabase storage sign → time-limited URL for the chosen image)
+  → Render Slide          (HTTP: Creatomate POST /v1/renders, synchronous, inline 1080x1350 source)
+  → Update Slide Render   (Supabase: slides.render_path = Creatomate render URL)
+```
+
+- **Inline source, no template:** the render uses an inline `source` JSON
+  (background image + dark overlay + headline + body), so no Creatomate template
+  needs to be designed. Tweak fonts/positions in the `Render Slide` node.
+- **Synchronous:** Creatomate's POST waits for the render and returns the hosted
+  image URL — no polling.
+- **Auth:** `Render Slide` uses an n8n **Bearer Auth** credential holding the
+  Creatomate API key.
+- `slides.render_path` stores Creatomate's hosted URL (~30-day CDN). The review
+  screen shows a `render_path` that's a full URL directly. Verified end-to-end:
+  a nurse-simulation request produced 7 rendered 1080x1350 slides.
+
+## Not yet implemented
 
 1. **Image generation** — when `pick_slide_asset` returns null (nothing clears
    the threshold), generate with the Gemini image model, upload to the `assets`
-   bucket, insert an `assets` row (with embedding), and use it.
-2. **Creatomate render** — send copy + chosen background + brand kit to
-   Creatomate (submit → poll → fetch), save finished slides to the `renders`
-   bucket, set `slides.render_path` / `carousels.output_path`. Requires a
-   Creatomate account, API key, and a carousel template.
+   bucket, insert an `assets` row (with embedding), and use it. (Currently a slide
+   with no match gets no background.)
+2. **Persist renders** — download Creatomate output into the private `renders`
+   bucket instead of relying on its ~30-day CDN URL, and set
+   `carousels.output_path` for the full carousel.
 
 ## Testing
 
