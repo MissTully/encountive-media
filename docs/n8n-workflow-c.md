@@ -16,12 +16,22 @@ Schedule Trigger (every 2 min)
   → Get Queued Request   (Supabase: content_requests where status = 'queued', limit 1)
   → Mark Generating      (status = 'generating')
   → Get Board Assets     (Supabase: project_assets for the request's project, by position)
-  → Write Slides         (Gemini text → JSON: [{headline, body_copy}], 5–7 slides)   ← executeOnce
+  → Write Slides         (Gemini text → JSON: [{headline, body_copy, image_need}], 5–7 slides)   ← executeOnce
   → Create Carousel      (Supabase insert carousels, status = 'in_review')
-  → Build Slides         (Code: parse JSON, assign a board image per slide round-robin)
-  → Insert Slide         (Supabase insert one slides row per item)
+  → Build Slides         (Code: parse JSON → one item per slide, carry project_id)
+  → Embed Image Need     (HTTP: gemini-embedding-001 of the slide's image_need, 768-dim)   ← per slide
+  → Pick Asset           (HTTP: rpc pick_slide_asset → board-first, then library)          ← per slide
+  → Insert Slide         (Supabase insert one slides row, asset_id from Pick Asset)
   → Mark In Review       (status = 'in_review')   ← executeOnce
 ```
+
+**Reuse-aware selection (spec step 4a/4b):** per slide, the "image need" text is
+embedded and `pick_slide_asset(query_embedding, project_id, match_threshold)`
+chooses the closest background — the **project board first**, then the wider org
+library — by cosine similarity (threshold 0.5). The function always returns
+exactly one row (asset, or null when nothing clears the threshold). Verified:
+a nurse-simulation request matched every slide to the relevant board image at
+0.69–0.76 similarity.
 
 ## Models / settings
 
@@ -43,17 +53,24 @@ Schedule Trigger (every 2 min)
 - If parsing yields 0 slides, no slide rows are written and the request stays
   `generating` (it won't be marked `in_review`) — a useful failure signal.
 
+## Gotchas found while building
+
+- **PostgREST content-type:** the `pick_slide_asset` RPC is called with
+  `Accept: application/vnd.pgrst.object+json` so it returns a single object (not
+  an array — which n8n would split into items). n8n does **not** auto-detect that
+  content-type as JSON, so the HTTP node must set `responseFormat: json`
+  explicitly, otherwise the body arrives as a raw string under `data` and
+  `$json.asset_id` is undefined.
+- **Thinking model truncation:** see `thinkingBudget: 0` note above.
+
 ## Not yet implemented (next iterations)
 
-This v1 covers copy + board reuse. The full spec's Workflow C also needs:
+Copy generation and **reuse-aware selection (board → library)** are done. Remaining:
 
-1. **Semantic reuse priority** — per slide, embed an "image need" description and
-   pick the best match: project board → wider library via `match_assets` →
-   else generate. (v1 just round-robins the board.)
-2. **Image generation** — when nothing fits, generate with the Gemini image
-   model, upload to the `assets` bucket, insert an `assets` row (with embedding),
-   and use it.
-3. **Creatomate render** — send copy + chosen background + brand kit to
+1. **Image generation** — when `pick_slide_asset` returns null (nothing clears
+   the threshold), generate with the Gemini image model, upload to the `assets`
+   bucket, insert an `assets` row (with embedding), and use it.
+2. **Creatomate render** — send copy + chosen background + brand kit to
    Creatomate (submit → poll → fetch), save finished slides to the `renders`
    bucket, set `slides.render_path` / `carousels.output_path`. Requires a
    Creatomate account, API key, and a carousel template.
