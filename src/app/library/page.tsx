@@ -1,0 +1,260 @@
+import Link from "next/link";
+import { redirect } from "next/navigation";
+import { getProfile } from "@/lib/auth";
+import { createClient } from "@/lib/supabase/server";
+import { embedText, hasGeminiKey } from "@/lib/embeddings";
+
+// Always render fresh so newly-processed images and searches reflect live data.
+export const dynamic = "force-dynamic";
+
+const STATUS_STYLES: Record<string, string> = {
+  uploaded: "bg-zinc-200 text-zinc-700 dark:bg-zinc-800 dark:text-zinc-300",
+  analyzing: "bg-blue-100 text-blue-700 dark:bg-blue-950 dark:text-blue-300",
+  ready: "bg-green-100 text-green-700 dark:bg-green-950 dark:text-green-300",
+};
+
+interface AssetCard {
+  id: string;
+  storage_path: string;
+  title: string | null;
+  description: string | null;
+  tags: string[];
+  status: string | null;
+  similarity: number | null;
+  url: string | null;
+}
+
+// Strip characters that would break PostgREST's `or` filter syntax.
+function sanitize(q: string): string {
+  return q.replace(/[,()*\\%]/g, " ").trim();
+}
+
+export default async function LibraryPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ q?: string; mode?: string }>;
+}) {
+  const ctx = await getProfile();
+  if (!ctx) redirect("/login");
+  const orgId = ctx.profile.org_id;
+
+  const sp = await searchParams;
+  const query = (sp.q ?? "").trim();
+  const mode = sp.mode === "semantic" ? "semantic" : "keyword";
+  const geminiReady = hasGeminiKey();
+
+  const supabase = await createClient();
+
+  let rows: Omit<AssetCard, "url">[] = [];
+  let searchError: string | null = null;
+
+  if (query && mode === "semantic") {
+    // Semantic search: embed the query, then rank assets by cosine similarity
+    // via the match_assets() function. Only `ready` assets are returned.
+    if (!geminiReady) {
+      searchError =
+        "Semantic search needs GOOGLE_GEMINI_API_KEY configured. Try keyword search instead.";
+    } else {
+      try {
+        const embedding = await embedText(query);
+        const { data, error } = await supabase.rpc("match_assets", {
+          query_embedding: JSON.stringify(embedding),
+          p_org_id: orgId,
+          match_threshold: 0.3,
+          match_count: 48,
+        });
+        if (error) throw error;
+        rows = (data ?? []).map((r) => ({
+          id: r.id,
+          storage_path: r.storage_path,
+          title: r.title,
+          description: r.description,
+          tags: r.tags ?? [],
+          status: "ready",
+          similarity: r.similarity,
+        }));
+      } catch (e) {
+        searchError =
+          e instanceof Error ? e.message : "Semantic search failed.";
+      }
+    }
+  } else {
+    // Keyword search (or no query → everything), newest first.
+    let q = supabase
+      .from("assets")
+      .select("id, storage_path, title, description, tags, status")
+      .order("created_at", { ascending: false });
+    if (query) {
+      const safe = sanitize(query);
+      q = q.or(`title.ilike.%${safe}%,description.ilike.%${safe}%`);
+    }
+    const { data } = await q;
+    rows = (data ?? []).map((r) => ({
+      id: r.id,
+      storage_path: r.storage_path,
+      title: r.title,
+      description: r.description,
+      tags: r.tags ?? [],
+      status: r.status,
+      similarity: null,
+    }));
+  }
+
+  // Private buckets → short-lived signed URLs for thumbnails.
+  const items: AssetCard[] = await Promise.all(
+    rows.map(async (r) => {
+      const { data } = await supabase.storage
+        .from("assets")
+        .createSignedUrl(r.storage_path, 3600);
+      return { ...r, url: data?.signedUrl ?? null };
+    }),
+  );
+
+  return (
+    <div className="flex flex-1 flex-col items-center bg-zinc-50 font-sans dark:bg-black">
+      <main className="flex w-full max-w-5xl flex-1 flex-col gap-6 px-6 py-16 sm:px-10">
+        <header className="flex items-end justify-between gap-4">
+          <div className="flex flex-col gap-2">
+            <Link
+              href="/"
+              className="text-sm text-zinc-500 hover:text-zinc-800 dark:hover:text-zinc-300"
+            >
+              ← Back
+            </Link>
+            <h1 className="text-3xl font-semibold tracking-tight text-zinc-900 dark:text-zinc-50">
+              Asset library
+            </h1>
+          </div>
+          <Link
+            href="/upload"
+            className="shrink-0 rounded-full bg-zinc-900 px-4 py-2 text-sm font-medium text-white hover:bg-zinc-700 dark:bg-zinc-100 dark:text-zinc-900 dark:hover:bg-zinc-300"
+          >
+            Upload
+          </Link>
+        </header>
+
+        {/* Search — plain GET form, no client JS needed. */}
+        <form className="flex flex-col gap-2 sm:flex-row" action="/library">
+          <input
+            type="search"
+            name="q"
+            defaultValue={query}
+            placeholder="Search by keyword or meaning…"
+            className="flex-1 rounded-full border border-zinc-300 bg-white px-4 py-2 text-sm text-zinc-900 outline-none focus:border-zinc-500 dark:border-zinc-700 dark:bg-zinc-950 dark:text-zinc-100"
+          />
+          <select
+            name="mode"
+            defaultValue={mode}
+            className="rounded-full border border-zinc-300 bg-white px-4 py-2 text-sm text-zinc-900 dark:border-zinc-700 dark:bg-zinc-950 dark:text-zinc-100"
+          >
+            <option value="keyword">Keyword</option>
+            <option value="semantic">Semantic (AI)</option>
+          </select>
+          <button
+            type="submit"
+            className="rounded-full bg-zinc-900 px-5 py-2 text-sm font-medium text-white hover:bg-zinc-700 dark:bg-zinc-100 dark:text-zinc-900 dark:hover:bg-zinc-300"
+          >
+            Search
+          </button>
+        </form>
+
+        <p className="text-sm text-zinc-500">
+          {query ? (
+            <>
+              {items.length} result{items.length === 1 ? "" : "s"} for{" "}
+              <span className="font-medium text-zinc-700 dark:text-zinc-300">
+                “{query}”
+              </span>{" "}
+              ({mode === "semantic" ? "semantic" : "keyword"})
+              {query && (
+                <>
+                  {" · "}
+                  <Link href="/library" className="underline">
+                    clear
+                  </Link>
+                </>
+              )}
+            </>
+          ) : (
+            <>
+              {items.length} image{items.length === 1 ? "" : "s"} in your
+              organization.
+            </>
+          )}
+        </p>
+
+        {searchError && (
+          <p className="rounded-lg border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-900 dark:border-amber-900 dark:bg-amber-950 dark:text-amber-300">
+            {searchError}
+          </p>
+        )}
+
+        {items.length === 0 && !searchError ? (
+          <div className="flex flex-col items-center gap-3 rounded-xl border border-dashed border-zinc-300 py-20 text-center dark:border-zinc-700">
+            <p className="text-zinc-600 dark:text-zinc-400">
+              {query ? "No matches." : "No images yet."}
+            </p>
+            {!query && (
+              <Link
+                href="/upload"
+                className="text-sm font-medium underline hover:text-zinc-800 dark:hover:text-zinc-300"
+              >
+                Upload your first images
+              </Link>
+            )}
+          </div>
+        ) : (
+          <ul className="grid grid-cols-2 gap-4 sm:grid-cols-3 md:grid-cols-4">
+            {items.map((a) => (
+              <li
+                key={a.id}
+                className="flex flex-col overflow-hidden rounded-lg border border-zinc-200 bg-white dark:border-zinc-800 dark:bg-zinc-950"
+              >
+                <div className="relative aspect-square bg-zinc-100 dark:bg-zinc-900">
+                  {a.url ? (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img
+                      src={a.url}
+                      alt={a.title ?? "Uploaded image"}
+                      className="h-full w-full object-cover"
+                    />
+                  ) : (
+                    <div className="flex h-full items-center justify-center text-xs text-zinc-400">
+                      no preview
+                    </div>
+                  )}
+                  {a.similarity !== null && (
+                    <span className="absolute right-1.5 top-1.5 rounded-full bg-black/70 px-2 py-0.5 text-[10px] font-medium text-white">
+                      {Math.round(a.similarity * 100)}% match
+                    </span>
+                  )}
+                </div>
+                <div className="flex flex-col gap-1 px-2.5 py-2">
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="truncate text-xs font-medium text-zinc-800 dark:text-zinc-200">
+                      {a.title ?? "Untitled"}
+                    </span>
+                    {a.status && (
+                      <span
+                        className={`shrink-0 rounded-full px-2 py-0.5 text-[10px] font-medium ${
+                          STATUS_STYLES[a.status] ?? STATUS_STYLES.uploaded
+                        }`}
+                      >
+                        {a.status}
+                      </span>
+                    )}
+                  </div>
+                  {a.tags.length > 0 && (
+                    <span className="truncate text-[11px] text-zinc-500">
+                      {a.tags.slice(0, 4).join(" · ")}
+                    </span>
+                  )}
+                </div>
+              </li>
+            ))}
+          </ul>
+        )}
+      </main>
+    </div>
+  );
+}
