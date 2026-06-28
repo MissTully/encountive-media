@@ -79,9 +79,9 @@ docs/                  # build specification
 2. ✅ Database schema — tables, pgvector, RLS, `match_assets`
 3. ✅ Bulk image upload + auth (Google OAuth)
 4. ✅ Vision auto-titling + embeddings ([n8n Workflow A](docs/n8n-workflow-a.md))
-5. Asset library with keyword + semantic search
-6. Projects & boards (Workflow B)
-7. Carousel generation with reuse priority + Creatomate render (Workflow C)
+5. ✅ Asset library with keyword + semantic search
+6. ✅ Projects & boards (Workflow B)
+7. 🚧 Carousel generation — content-request flow + copy/board-reuse ([Workflow C](docs/n8n-workflow-c.md)) done; semantic reuse, image-gen, and Creatomate render pending
 8. Review / approval screen
 
 Build and test one phase before moving to the next.
