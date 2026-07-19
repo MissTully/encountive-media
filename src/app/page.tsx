@@ -17,26 +17,32 @@ const PHASES = [
   {
     title: "Bulk upload",
     detail: "Upload many images to the assets bucket with a row per file.",
+    done: true,
   },
   {
     title: "Vision titling + embeddings",
     detail: "Gemini writes title, description, tags; embed for semantic search.",
+    done: true,
   },
   {
     title: "Asset library",
     detail: "Keyword + semantic search over the org-wide image library.",
+    done: true,
   },
   {
     title: "Projects & boards",
     detail: "Multi-select images onto project boards.",
+    done: true,
   },
   {
     title: "Carousel generation",
     detail: "Reuse-aware copy + image pipeline, rendered via Creatomate.",
+    done: true,
   },
   {
     title: "Review & approval",
     detail: "Human approves each carousel before it can be published.",
+    done: true,
   },
 ];
 

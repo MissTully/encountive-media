@@ -6,9 +6,13 @@ import {
   approveRequest,
   requeueRequest,
   reopenRequest,
+  generateCarouselNow,
 } from "../../../actions";
 
 export const dynamic = "force-dynamic";
+// In-app generation (copy + per-slide embedding/selection, optional image
+// generation and Creatomate renders) can run well past the default window.
+export const maxDuration = 300;
 
 const STATUS_STYLES: Record<string, string> = {
   queued: "bg-zinc-200 text-zinc-700 dark:bg-zinc-800 dark:text-zinc-300",
@@ -28,10 +32,13 @@ interface SlideRow {
 
 export default async function RequestDetailPage({
   params,
+  searchParams,
 }: {
   params: Promise<{ id: string; requestId: string }>;
+  searchParams: Promise<{ notice?: string }>;
 }) {
   const { id, requestId } = await params;
+  const notice = ((await searchParams).notice ?? "").trim();
   const ctx = await getProfile();
   if (!ctx) redirect("/login");
 
@@ -159,11 +166,27 @@ export default async function RequestDetailPage({
           </div>
         )}
 
-        {(request.status === "queued" || request.status === "generating") && (
+        {notice && (
           <div className="rounded-xl border border-blue-300 bg-blue-50 px-4 py-3 text-sm text-blue-800 dark:border-blue-900 dark:bg-blue-950 dark:text-blue-300">
-            {request.status === "queued"
-              ? "Queued — the generation workflow will write the slides shortly."
-              : "Generating slides…"}
+            {notice}
+          </div>
+        )}
+
+        {(request.status === "queued" || request.status === "generating") && (
+          <div className="flex flex-col gap-3 rounded-xl border border-blue-300 bg-blue-50 px-4 py-3 sm:flex-row sm:items-center dark:border-blue-900 dark:bg-blue-950">
+            <span className="flex-1 text-sm text-blue-800 dark:text-blue-300">
+              {request.status === "queued"
+                ? "Queued — the scheduled workflow will pick this up, or generate it right now."
+                : "Generating… If this has been stuck for a while, the workflow run likely failed — generate it in-app instead."}
+            </span>
+            <form action={generateCarouselNow.bind(null, requestId, id)}>
+              <button
+                type="submit"
+                className="shrink-0 rounded-full bg-zinc-900 px-4 py-1.5 text-sm font-medium text-white hover:bg-zinc-700 dark:bg-zinc-100 dark:text-zinc-900 dark:hover:bg-zinc-300"
+              >
+                Generate now
+              </button>
+            </form>
           </div>
         )}
 

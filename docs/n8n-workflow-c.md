@@ -85,15 +85,26 @@ Insert Slide
   screen shows a `render_path` that's a full URL directly. Verified end-to-end:
   a nurse-simulation request produced 7 rendered 1080x1350 slides.
 
-## Not yet implemented
+## Not yet implemented (in n8n — implemented in-app 2026-07-19)
 
-1. **Image generation** — when `pick_slide_asset` returns null (nothing clears
-   the threshold), generate with the Gemini image model, upload to the `assets`
-   bucket, insert an `assets` row (with embedding), and use it. (Currently a slide
-   with no match gets no background.)
-2. **Persist renders** — download Creatomate output into the private `renders`
-   bucket instead of relying on its ~30-day CDN URL, and set
-   `carousels.output_path` for the full carousel.
+Both remaining steps now exist in the app's **Generate now** pipeline
+(`src/lib/carousel.ts`), which runs this whole workflow in-app from the request
+page. The n8n flow still lacks them:
+
+1. **Image generation** — when `pick_slide_asset` returns null, the app
+   generates with `gemini-2.5-flash-image`, uploads to the `assets` bucket,
+   inserts an `assets` row (`source = generated`, with embedding), and uses it.
+   (In n8n, a slide with no match still gets no background.)
+2. **Persist renders** — the app downloads Creatomate output into the private
+   `renders` bucket (`{org_id}/{carousel_id}/slide-N.png`), stores that storage
+   path in `slides.render_path`, and sets `carousels.output_path`. The review
+   screen handles both storage paths and n8n's raw CDN URLs.
+
+The in-app pipeline needs `GOOGLE_GEMINI_API_KEY` (and `CREATOMATE_API_KEY` for
+rendering) in the app's environment. If a run fails partway, it deletes the
+partial carousel and re-queues the request — nothing is stranded at
+`generating` (unlike the n8n flow, whose failed runs leave the request stuck;
+the request page now offers **Generate now** as the recovery).
 
 ## Testing
 
