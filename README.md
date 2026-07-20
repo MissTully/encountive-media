@@ -87,6 +87,19 @@ docs/                  # build specification
 All phases are built. See [`docs/test-report-2026-07-19.md`](docs/test-report-2026-07-19.md)
 for the full end-to-end test pass and the n8n outage diagnosis.
 
+## Social publishing
+
+Rendered videos can be published to **LinkedIn**, a **Facebook Page**, and
+**Instagram** (as Reels). Connect the accounts under **Social accounts**
+(`/social`), then use the **Publish** page linked from any rendered video.
+Publishing is always manual (human approval before publishing, per the spec)
+and every attempt is recorded in `social_posts`.
+
+Requires a LinkedIn app (`LINKEDIN_CLIENT_ID` / `LINKEDIN_CLIENT_SECRET`) and
+a Meta app (`META_APP_ID` / `META_APP_SECRET`) — one-time setup, including
+the Facebook Page + Instagram professional-account requirements, is walked
+through in [`docs/social-publishing-setup.md`](docs/social-publishing-setup.md).
+
 ## Generation runs in two places
 
 The n8n workflows poll on a schedule; the app can also run the same pipelines

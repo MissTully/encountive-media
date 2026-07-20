@@ -5,6 +5,7 @@ import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { getProfile } from "@/lib/auth";
 import { renderVideo } from "@/lib/video";
+import { publishVideoToAccounts } from "@/lib/social/publish";
 
 // Server actions are reachable via direct POST, not just the UI — every one
 // verifies the session first (RLS is the second line of defense, but it fails
@@ -294,6 +295,42 @@ export async function createVideoFromCarousel(
 
   revalidatePath("/videos");
   redirect(`/videos/${video.id}`);
+}
+
+/**
+ * Publish a rendered video to the selected connected social accounts.
+ * Runs in-request (platform uploads + processing polls); the publish page
+ * sets maxDuration to budget for it. Outcomes land in `social_posts` and are
+ * summarized back onto the page as a notice.
+ */
+export async function publishVideo(videoId: string, formData: FormData) {
+  const ctx = await requireProfile();
+
+  const accountIds = formData
+    .getAll("account_id")
+    .map((v) => String(v).trim())
+    .filter(Boolean);
+  const caption = String(formData.get("caption") ?? "").trim();
+
+  const supabase = await createClient();
+  const outcomes = await publishVideoToAccounts(
+    supabase,
+    ctx.profile.org_id,
+    videoId,
+    accountIds,
+    caption,
+  );
+
+  const summary = outcomes
+    .map((o) =>
+      o.ok
+        ? `Published to ${o.accountName}.`
+        : `${o.accountName ? `${o.accountName}: ` : ""}${o.message}`,
+    )
+    .join(" ");
+
+  revalidatePath(`/videos/${videoId}/publish`);
+  redirect(`/videos/${videoId}/publish?notice=${encodeURIComponent(summary)}`);
 }
 
 /**
