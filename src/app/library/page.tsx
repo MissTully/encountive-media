@@ -4,24 +4,14 @@ import { getProfile } from "@/lib/auth";
 import { createClient } from "@/lib/supabase/server";
 import { embedText, hasGeminiKey } from "@/lib/embeddings";
 import { firstParam, sanitizeSearch } from "@/lib/search";
-import {
-  analyzePendingAssets,
-  resetStuckAssets,
-  renameAsset,
-  deleteAsset,
-} from "./actions";
+import { analyzePendingAssets, resetStuckAssets } from "./actions";
+import { LibraryGrid } from "./grid";
 
 // Always render fresh so newly-processed images and searches reflect live data.
 export const dynamic = "force-dynamic";
 // Analyzing a batch of images (vision + embedding per image) takes longer than
 // the default serverless window.
 export const maxDuration = 60;
-
-const STATUS_STYLES: Record<string, string> = {
-  uploaded: "bg-zinc-200 text-zinc-700 dark:bg-zinc-800 dark:text-zinc-300",
-  analyzing: "bg-blue-100 text-blue-700 dark:bg-blue-950 dark:text-blue-300",
-  ready: "bg-green-100 text-green-700 dark:bg-green-950 dark:text-green-300",
-};
 
 interface AssetCard {
   id: string;
@@ -294,94 +284,7 @@ export default async function LibraryPage({
             )}
           </div>
         ) : (
-          <ul className="grid grid-cols-2 gap-4 sm:grid-cols-3 md:grid-cols-4">
-            {items.map((a) => (
-              <li
-                key={a.id}
-                className="flex flex-col overflow-hidden rounded-lg border border-zinc-200 bg-white dark:border-zinc-800 dark:bg-zinc-950"
-              >
-                <div className="relative aspect-square bg-zinc-100 dark:bg-zinc-900">
-                  {a.url ? (
-                    // eslint-disable-next-line @next/next/no-img-element
-                    <img
-                      src={a.url}
-                      alt={a.title ?? "Uploaded image"}
-                      className="h-full w-full object-cover"
-                    />
-                  ) : (
-                    <div className="flex h-full items-center justify-center text-xs text-zinc-400">
-                      no preview
-                    </div>
-                  )}
-                  {a.similarity !== null && (
-                    <span className="absolute right-1.5 top-1.5 rounded-full bg-black/70 px-2 py-0.5 text-[10px] font-medium text-white">
-                      {Math.round(a.similarity * 100)}% match
-                    </span>
-                  )}
-                </div>
-                <div className="flex flex-col gap-1.5 px-2.5 py-2">
-                  <div className="flex items-center gap-2">
-                    {/* Inline rename: edit the title in place, ✓ to save. */}
-                    <form
-                      action={renameAsset.bind(null, a.id)}
-                      className="flex min-w-0 flex-1 items-center gap-1"
-                    >
-                      <input
-                        type="text"
-                        name="title"
-                        required
-                        defaultValue={a.title ?? ""}
-                        placeholder="Untitled"
-                        className="w-full min-w-0 rounded border border-transparent bg-transparent px-1 py-0.5 text-xs font-medium text-zinc-800 outline-none hover:border-zinc-200 focus:border-zinc-400 focus:bg-white dark:text-zinc-200 dark:hover:border-zinc-800 dark:focus:border-zinc-600 dark:focus:bg-zinc-950"
-                      />
-                      <button
-                        type="submit"
-                        title="Save name"
-                        className="shrink-0 rounded px-1 text-xs text-zinc-400 hover:text-zinc-800 dark:hover:text-zinc-200"
-                      >
-                        ✓
-                      </button>
-                    </form>
-                    {a.status && (
-                      <span
-                        className={`shrink-0 rounded-full px-2 py-0.5 text-[10px] font-medium ${
-                          STATUS_STYLES[a.status] ?? STATUS_STYLES.uploaded
-                        }`}
-                      >
-                        {a.status}
-                      </span>
-                    )}
-                  </div>
-                  {a.tags.length > 0 && (
-                    <span className="truncate text-[11px] text-zinc-500">
-                      {a.tags.slice(0, 4).join(" · ")}
-                    </span>
-                  )}
-                  <div className="flex items-center justify-between border-t border-zinc-100 pt-1.5 dark:border-zinc-900">
-                    {a.downloadUrl ? (
-                      <a
-                        href={a.downloadUrl}
-                        className="text-[11px] font-medium text-zinc-500 underline hover:text-zinc-800 dark:hover:text-zinc-300"
-                      >
-                        ⬇ Download
-                      </a>
-                    ) : (
-                      <span />
-                    )}
-                    <form action={deleteAsset.bind(null, a.id)}>
-                      <button
-                        type="submit"
-                        title="Delete from library (removes it from project boards too)"
-                        className="text-[11px] font-medium text-zinc-400 hover:text-red-600 dark:hover:text-red-400"
-                      >
-                        Delete
-                      </button>
-                    </form>
-                  </div>
-                </div>
-              </li>
-            ))}
-          </ul>
+          <LibraryGrid items={items} />
         )}
       </main>
     </div>
