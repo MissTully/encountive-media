@@ -92,6 +92,16 @@ export interface Project {
   created_at: string;
 }
 
+/** One turn in a project's Creative Director agent conversation. */
+export interface ProjectAgentMessage {
+  id: UUID;
+  project_id: UUID;
+  author_id: UUID | null; // the human who asked; null for agent turns
+  role: "user" | "agent";
+  body: string;
+  created_at: string;
+}
+
 /** Join table — this IS the project board. */
 export interface ProjectAsset {
   project_id: UUID;

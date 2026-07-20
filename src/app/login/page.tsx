@@ -29,17 +29,18 @@ export default function LoginPage() {
   }
 
   return (
-    <div className="flex flex-1 flex-col items-center justify-center bg-zinc-50 px-6 font-sans dark:bg-black">
-      <div className="flex w-full max-w-sm flex-col gap-6 rounded-xl border border-zinc-200 bg-white p-8 dark:border-zinc-800 dark:bg-zinc-950">
-        <div className="flex flex-col gap-1">
-          <span className="text-xs font-medium uppercase tracking-widest text-zinc-500">
-            Encountive
+    <div className="flex flex-1 flex-col items-center justify-center px-6 font-sans">
+      <div className="flex w-full max-w-sm flex-col gap-6 rounded-2xl border border-line bg-surface p-8">
+        <div className="flex flex-col gap-2">
+          <span className="text-[11px] font-medium uppercase tracking-[0.2em] text-muted">
+            Encountive Inc · Sales &amp; Marketing
           </span>
-          <h1 className="text-2xl font-semibold tracking-tight text-zinc-900 dark:text-zinc-50">
-            Content Studio
+          <h1 className="font-display text-3xl font-semibold tracking-tight text-ink">
+            Encountive <span className="font-light italic text-accent">Media</span>
           </h1>
-          <p className="text-sm text-zinc-600 dark:text-zinc-400">
-            Sign in to continue.
+          <p className="text-sm leading-6 text-muted">
+            Your social media marketing agent. Sign in to begin the creative
+            journey.
           </p>
         </div>
 

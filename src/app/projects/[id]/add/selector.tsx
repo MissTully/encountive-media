@@ -41,7 +41,7 @@ export function AssetSelector({
 
   return (
     <div className="flex flex-col gap-4">
-      <div className="sticky top-0 z-10 flex items-center justify-between gap-4 bg-zinc-50/90 py-2 backdrop-blur dark:bg-black/90">
+      <div className="sticky top-0 z-10 flex items-center justify-between gap-4 bg-canvas/90 py-2 backdrop-blur">
         <span className="text-sm text-zinc-600 dark:text-zinc-400">
           {selected.size} selected
         </span>

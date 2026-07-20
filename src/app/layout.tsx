@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
-import { Geist, Geist_Mono } from "next/font/google";
+import { Fraunces, Geist, Geist_Mono } from "next/font/google";
+import { SiteNav } from "@/components/site-nav";
 import "./globals.css";
 
 const geistSans = Geist({
@@ -12,10 +13,17 @@ const geistMono = Geist_Mono({
   subsets: ["latin"],
 });
 
+// Display serif for headlines — gives the app its editorial, studio feel.
+const fraunces = Fraunces({
+  variable: "--font-fraunces",
+  subsets: ["latin"],
+  axes: ["opsz"],
+});
+
 export const metadata: Metadata = {
-  title: "Encountive Content Studio",
+  title: "Encountive Media",
   description:
-    "Generate on-brand social-media carousels — reuse-aware image library, AI copy, and template rendering.",
+    "The social media marketing agent of Encountive Inc — Department of Sales & Marketing. Craft on-brand carousels and marketing videos on one creative journey.",
 };
 
 export default function RootLayout({
@@ -26,9 +34,12 @@ export default function RootLayout({
   return (
     <html
       lang="en"
-      className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
+      className={`${geistSans.variable} ${geistMono.variable} ${fraunces.variable} h-full antialiased`}
     >
-      <body className="min-h-full flex flex-col">{children}</body>
+      <body className="min-h-full flex flex-col">
+        <SiteNav />
+        {children}
+      </body>
     </html>
   );
 }
