@@ -116,41 +116,49 @@ export async function renameAsset(assetId: string, formData: FormData) {
 }
 
 /**
- * Delete a library image everywhere it's referenced: off project boards, out
- * of slides/clips that used it as a background (nulled, not deleted — the
- * rendered output survives), then the row, then the storage object. References
- * are cleared in code first so the delete works regardless of how the FKs'
- * on-delete behavior is configured; the row goes before storage so a failed
- * cleanup leaves only an orphaned object, never a dangling reference.
+ * Delete library images everywhere they're referenced: off project boards, out
+ * of slides/clips that used them as backgrounds (nulled, not deleted — the
+ * rendered output survives), then the rows, then the storage objects.
+ * References are cleared in code first so the delete works regardless of how
+ * the FKs' on-delete behavior is configured; rows go before storage so a
+ * failed cleanup leaves only orphaned objects, never dangling references.
  */
-export async function deleteAsset(assetId: string) {
+export async function deleteAssets(assetIds: string[]) {
+  if (assetIds.length === 0) return;
+
   const ctx = await getProfile();
   if (!ctx) redirect("/login");
 
   const supabase = await createClient();
-  const { data: asset } = await supabase
+  const { data: assets } = await supabase
     .from("assets")
     .select("storage_path")
-    .eq("id", assetId)
-    .single();
-  if (!asset) return;
+    .in("id", assetIds);
+  if (!assets || assets.length === 0) return;
 
   const cleared = await Promise.all([
-    supabase.from("project_assets").delete().eq("asset_id", assetId),
-    supabase.from("slides").update({ asset_id: null }).eq("asset_id", assetId),
+    supabase.from("project_assets").delete().in("asset_id", assetIds),
+    supabase.from("slides").update({ asset_id: null }).in("asset_id", assetIds),
     supabase
       .from("video_clips")
       .update({ asset_id: null })
-      .eq("asset_id", assetId),
+      .in("asset_id", assetIds),
   ]);
   const clearError = cleared.find((r) => r.error)?.error;
   if (clearError) throw new Error(clearError.message);
 
-  const { error } = await supabase.from("assets").delete().eq("id", assetId);
+  const { error } = await supabase.from("assets").delete().in("id", assetIds);
   if (error) throw new Error(error.message);
-  await supabase.storage.from("assets").remove([asset.storage_path]);
+  await supabase.storage
+    .from("assets")
+    .remove(assets.map((a) => a.storage_path));
 
   revalidatePath("/library");
+}
+
+/** Delete a single library image (the card's Delete button). */
+export async function deleteAsset(assetId: string) {
+  await deleteAssets([assetId]);
 }
 
 /**

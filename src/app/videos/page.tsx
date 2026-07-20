@@ -4,6 +4,7 @@ import { getProfile } from "@/lib/auth";
 import { createClient } from "@/lib/supabase/server";
 import { createVideo, deleteVideo } from "./actions";
 import { VIDEO_STATUS_STYLES } from "./status";
+import { PendingButton } from "@/components/pending-button";
 
 // Always render fresh so statuses reflect live render state.
 export const dynamic = "force-dynamic";
@@ -111,14 +112,16 @@ export default async function VideosPage() {
                 >
                   Open editor
                 </Link>
-                <form action={deleteVideo}>
+                <form action={deleteVideo} className="shrink-0">
                   <input type="hidden" name="id" value={v.id} />
-                  <button
-                    type="submit"
-                    className="shrink-0 rounded-full border border-red-200 px-3 py-1.5 text-xs font-medium text-red-600 hover:bg-red-50 dark:border-red-900 dark:text-red-400 dark:hover:bg-red-950"
-                  >
-                    Delete
-                  </button>
+                  {/* Deleting removes the row and its rendered MP4 — slow
+                      enough that the click needs immediate feedback. */}
+                  <PendingButton
+                    label="Delete"
+                    pendingLabel="Deleting…"
+                    className="rounded-full border border-red-200 px-3 py-1.5 text-xs font-medium text-red-600 transition-colors hover:bg-red-50 dark:border-red-900 dark:text-red-400 dark:hover:bg-red-950"
+                    pendingClassName="animate-pulse cursor-wait rounded-full border border-red-600 bg-red-600 px-3 py-1.5 text-xs font-medium text-white"
+                  />
                 </form>
               </li>
             ))}
