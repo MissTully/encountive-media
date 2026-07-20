@@ -1,215 +1,231 @@
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
 import { hasSupabaseConfig } from "@/lib/env";
-import { signOut } from "@/app/auth/actions";
 
-const PHASES = [
+// The creative journey, in order — each step links straight to where it
+// happens so the home page doubles as a guided map of the studio.
+const JOURNEY = [
   {
-    title: "Scaffold & auth",
-    detail: "Next.js + Tailwind + Supabase; Google sign-in with auto profiles.",
-    done: true,
-  },
-  {
-    title: "Database schema",
-    detail: "Tables, pgvector, RLS policies, and the match_assets function.",
-    done: true,
-  },
-  {
-    title: "Bulk upload",
-    detail: "Upload many images to the assets bucket with a row per file.",
-    done: true,
-  },
-  {
-    title: "Vision titling + embeddings",
-    detail: "Gemini writes title, description, tags; embed for semantic search.",
-    done: true,
-  },
-  {
-    title: "Asset library",
-    detail: "Keyword + semantic search over the org-wide image library.",
-    done: true,
-  },
-  {
-    title: "Projects & boards",
-    detail: "Multi-select images onto project boards.",
-    done: true,
-  },
-  {
-    title: "Carousel generation",
-    detail: "Reuse-aware copy + image pipeline, rendered via Creatomate.",
-    done: true,
-  },
-  {
-    title: "Review & approval",
-    detail: "Human approves each carousel before it can be published.",
-    done: true,
-  },
-  {
-    title: "Music library",
-    detail: "Upload and manage soundtrack audio alongside the image library.",
-    done: true,
-  },
-  {
-    title: "Video editor",
+    step: "01",
+    title: "Start a project",
     detail:
-      "Assemble clips + music into marketing videos; preview, render to MP4, download.",
-    done: true,
+      "Give your campaign a home. Every project carries its own moodboard, briefs, and finished content.",
+    href: "/projects",
+    label: "Open Projects",
+  },
+  {
+    step: "02",
+    title: "Gather your visuals & sound",
+    detail:
+      "Pull images from the shared library — every upload is auto-titled and searchable — and pick a soundtrack from the music library.",
+    href: "/library",
+    label: "Browse the Image Library",
+  },
+  {
+    step: "03",
+    title: "Consult the Creative Director",
+    detail:
+      "An AI design agent inside every project. Ask for art direction, slide structure, color and typography guidance — it knows your board and your brand voice.",
+    href: "/projects",
+    label: "Ask inside a project",
+  },
+  {
+    step: "04",
+    title: "Create carousels & videos",
+    detail:
+      "Brief a carousel and let the studio write on-brand copy and pick or generate imagery. Assemble clips and music into a marketing video.",
+    href: "/videos",
+    label: "Open the Video Studio",
+  },
+  {
+    step: "05",
+    title: "Review, approve, publish",
+    detail:
+      "Nothing ships without your eyes on it. Comment on individual slides, request changes, then approve and download the finished piece.",
+    href: "/projects?status=in_review",
+    label: "See what's in review",
+  },
+];
+
+const TOOLS = [
+  {
+    title: "Projects",
+    detail: "Campaign boards, briefs, and the Creative Director agent.",
+    href: "/projects",
+  },
+  {
+    title: "Image Library",
+    detail: "Searchable, reuse-aware visuals for the whole team.",
+    href: "/library",
+  },
+  {
+    title: "Music Library",
+    detail: "Soundtracks for your videos, managed like your images.",
+    href: "/music",
+  },
+  {
+    title: "Video Studio",
+    detail: "Assemble clips and music; render downloadable MP4s.",
+    href: "/videos",
+  },
+  {
+    title: "Brand Kit",
+    detail: "Voice guidelines that keep every word on-brand.",
+    href: "/brand",
+  },
+  {
+    title: "Upload Images",
+    detail: "Drop in new visuals — titled and tagged automatically.",
+    href: "/upload",
   },
 ];
 
 export default async function Home() {
   const configured = hasSupabaseConfig();
 
-  // When configured, the proxy guarantees a signed-in user here. Look up their
-  // email and organization for the header.
-  let email: string | null = null;
-  let orgName: string | null = null;
+  let signedIn = false;
+  let firstName: string | null = null;
   if (configured) {
     const supabase = await createClient();
     const {
       data: { user },
     } = await supabase.auth.getUser();
-    email = user?.email ?? null;
+    signedIn = Boolean(user);
     if (user) {
       const { data: profile } = await supabase
         .from("profiles")
-        .select("organizations(name)")
+        .select("full_name")
         .eq("id", user.id)
         .single();
-      orgName = profile?.organizations?.name ?? null;
+      firstName = profile?.full_name?.split(" ")[0] ?? null;
     }
   }
 
   return (
-    <div className="flex flex-1 flex-col items-center bg-zinc-50 font-sans dark:bg-black">
-      <main className="flex w-full max-w-3xl flex-1 flex-col gap-10 px-6 py-16 sm:px-10">
-        <header className="flex flex-col gap-3">
-          <div className="flex items-center justify-between gap-4">
-            <span className="text-xs font-medium uppercase tracking-widest text-zinc-500">
-              Encountive{orgName ? ` · ${orgName}` : ""}
-            </span>
-            {email && (
-              <div className="flex items-center gap-3 text-sm text-zinc-600 dark:text-zinc-400">
-                <span className="hidden sm:inline">{email}</span>
-                <form action={signOut}>
-                  <button
-                    type="submit"
-                    className="rounded-full border border-zinc-300 px-3 py-1 text-xs font-medium hover:bg-zinc-100 dark:border-zinc-700 dark:hover:bg-zinc-800"
-                  >
-                    Sign out
-                  </button>
-                </form>
-              </div>
+    <div className="flex flex-1 flex-col items-center font-sans">
+      <main className="flex w-full max-w-5xl flex-1 flex-col gap-20 px-6 py-16 sm:px-10 sm:py-20">
+        {/* ---- Introduction ---- */}
+        <header className="flex flex-col items-center gap-6 text-center">
+          <span className="rounded-full border border-line bg-surface px-4 py-1.5 text-[11px] font-medium uppercase tracking-[0.2em] text-muted">
+            Encountive Inc · Department of Sales &amp; Marketing
+          </span>
+          <h1 className="font-display text-5xl font-semibold tracking-tight text-ink sm:text-7xl">
+            Encountive{" "}
+            <span className="font-light italic text-accent">Media</span>
+          </h1>
+          <p className="max-w-2xl text-lg leading-8 text-muted sm:text-xl">
+            Your social media marketing agent. From the first spark of an idea
+            to an approved, ready-to-publish carousel or video — one elegant
+            creative journey, guided at every step.
+          </p>
+          <div className="flex flex-wrap items-center justify-center gap-3 pt-2">
+            {signedIn ? (
+              <>
+                <Link
+                  href="/projects"
+                  className="rounded-full bg-accent px-6 py-3 text-sm font-medium text-white shadow-sm transition-colors hover:bg-accent-strong dark:text-ink"
+                >
+                  {firstName
+                    ? `Continue your journey, ${firstName}`
+                    : "Continue your journey"}
+                </Link>
+                <Link
+                  href="/library"
+                  className="rounded-full border border-line bg-surface px-6 py-3 text-sm font-medium text-ink transition-colors hover:border-accent hover:text-accent"
+                >
+                  Browse the library
+                </Link>
+              </>
+            ) : (
+              <Link
+                href="/login"
+                className="rounded-full bg-accent px-6 py-3 text-sm font-medium text-white shadow-sm transition-colors hover:bg-accent-strong dark:text-ink"
+              >
+                Sign in to begin
+              </Link>
             )}
           </div>
-          <h1 className="text-4xl font-semibold tracking-tight text-zinc-900 dark:text-zinc-50">
-            Content Studio
-          </h1>
-          <p className="max-w-xl text-lg leading-8 text-zinc-600 dark:text-zinc-400">
-            Generate on-brand social-media carousels and marketing videos: a
-            reuse-aware image library, a music library, AI-written copy, and a
-            video editor that renders downloadable MP4s. Built multi-tenant
-            from day one.
-          </p>
-          {email && (
-            <nav className="flex gap-3">
-              <Link
-                href="/upload"
-                className="rounded-full bg-zinc-900 px-4 py-2 text-sm font-medium text-white hover:bg-zinc-700 dark:bg-zinc-100 dark:text-zinc-900 dark:hover:bg-zinc-300"
-              >
-                Upload images
-              </Link>
-              <Link
-                href="/library"
-                className="rounded-full border border-zinc-300 px-4 py-2 text-sm font-medium text-zinc-800 hover:bg-zinc-100 dark:border-zinc-700 dark:text-zinc-200 dark:hover:bg-zinc-800"
-              >
-                Asset library
-              </Link>
-              <Link
-                href="/music"
-                className="rounded-full border border-zinc-300 px-4 py-2 text-sm font-medium text-zinc-800 hover:bg-zinc-100 dark:border-zinc-700 dark:text-zinc-200 dark:hover:bg-zinc-800"
-              >
-                Music library
-              </Link>
-              <Link
-                href="/videos"
-                className="rounded-full border border-zinc-300 px-4 py-2 text-sm font-medium text-zinc-800 hover:bg-zinc-100 dark:border-zinc-700 dark:text-zinc-200 dark:hover:bg-zinc-800"
-              >
-                Videos
-              </Link>
-              <Link
-                href="/projects"
-                className="rounded-full border border-zinc-300 px-4 py-2 text-sm font-medium text-zinc-800 hover:bg-zinc-100 dark:border-zinc-700 dark:text-zinc-200 dark:hover:bg-zinc-800"
-              >
-                Projects
-              </Link>
-              <Link
-                href="/brand"
-                className="rounded-full border border-zinc-300 px-4 py-2 text-sm font-medium text-zinc-800 hover:bg-zinc-100 dark:border-zinc-700 dark:text-zinc-200 dark:hover:bg-zinc-800"
-              >
-                Brand kit
-              </Link>
-            </nav>
-          )}
         </header>
 
-        <section
-          className={`rounded-lg border px-4 py-3 text-sm ${
-            configured
-              ? "border-green-300 bg-green-50 text-green-800 dark:border-green-900 dark:bg-green-950 dark:text-green-300"
-              : "border-amber-300 bg-amber-50 text-amber-900 dark:border-amber-900 dark:bg-amber-950 dark:text-amber-300"
-          }`}
-        >
-          {configured ? (
-            <>Supabase environment detected — you&apos;re ready to wire up data.</>
-          ) : (
-            <>
-              No Supabase config yet. Copy{" "}
-              <code className="font-mono">.env.example</code> to{" "}
-              <code className="font-mono">.env.local</code> and add your project
-              URL and anon key.
-            </>
-          )}
-        </section>
+        {!configured && (
+          <section className="rounded-xl border border-gold/40 bg-gold-soft px-4 py-3 text-sm text-gold">
+            No Supabase config yet. Copy{" "}
+            <code className="font-mono">.env.example</code> to{" "}
+            <code className="font-mono">.env.local</code> and add your project
+            URL and anon key.
+          </section>
+        )}
 
-        <section className="flex flex-col gap-4">
-          <h2 className="text-sm font-semibold uppercase tracking-widest text-zinc-500">
-            Build roadmap
-          </h2>
-          <ol className="flex flex-col gap-2">
-            {PHASES.map((phase, i) => (
+        {/* ---- The creative journey ---- */}
+        <section className="flex flex-col gap-8">
+          <div className="flex flex-col gap-2 text-center">
+            <span className="text-[11px] font-medium uppercase tracking-[0.2em] text-accent">
+              How it works
+            </span>
+            <h2 className="font-display text-3xl font-semibold tracking-tight text-ink sm:text-4xl">
+              The creative journey
+            </h2>
+          </div>
+          <ol className="flex flex-col gap-3">
+            {JOURNEY.map((s) => (
               <li
-                key={phase.title}
-                className="flex items-start gap-3 rounded-lg border border-zinc-200 bg-white px-4 py-3 dark:border-zinc-800 dark:bg-zinc-950"
+                key={s.step}
+                className="group flex flex-col gap-4 rounded-2xl border border-line bg-surface p-6 transition-colors hover:border-accent/50 sm:flex-row sm:items-center sm:gap-6"
               >
-                <span
-                  className={`mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-xs font-semibold ${
-                    phase.done
-                      ? "bg-green-600 text-white"
-                      : "bg-zinc-200 text-zinc-600 dark:bg-zinc-800 dark:text-zinc-400"
-                  }`}
-                >
-                  {phase.done ? "✓" : i + 1}
+                <span className="font-display text-3xl font-light italic text-accent/70">
+                  {s.step}
                 </span>
-                <div className="flex flex-col">
-                  <span className="font-medium text-zinc-900 dark:text-zinc-100">
-                    {phase.title}
-                  </span>
-                  <span className="text-sm text-zinc-600 dark:text-zinc-400">
-                    {phase.detail}
-                  </span>
+                <div className="flex min-w-0 flex-1 flex-col gap-1">
+                  <h3 className="font-display text-xl font-semibold text-ink">
+                    {s.title}
+                  </h3>
+                  <p className="text-sm leading-6 text-muted">{s.detail}</p>
                 </div>
+                {signedIn && (
+                  <Link
+                    href={s.href}
+                    className="shrink-0 self-start rounded-full border border-line px-4 py-2 text-xs font-medium text-muted transition-colors group-hover:border-accent group-hover:text-accent sm:self-center"
+                  >
+                    {s.label} →
+                  </Link>
+                )}
               </li>
             ))}
           </ol>
         </section>
 
-        <footer className="mt-auto text-sm text-zinc-500">
-          See{" "}
-          <code className="font-mono">
-            docs/encountive-content-studio-build-spec.md
-          </code>{" "}
-          for the full build specification.
+        {/* ---- Studio map ---- */}
+        <section className="flex flex-col gap-8">
+          <div className="flex flex-col gap-2 text-center">
+            <span className="text-[11px] font-medium uppercase tracking-[0.2em] text-accent">
+              The studio
+            </span>
+            <h2 className="font-display text-3xl font-semibold tracking-tight text-ink sm:text-4xl">
+              Everything, clearly labelled
+            </h2>
+          </div>
+          <ul className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+            {TOOLS.map((t) => (
+              <li key={t.title}>
+                <Link
+                  href={signedIn ? t.href : "/login"}
+                  className="flex h-full flex-col gap-1.5 rounded-2xl border border-line bg-surface p-5 transition-colors hover:border-accent/60"
+                >
+                  <span className="font-display text-lg font-semibold text-ink">
+                    {t.title}
+                  </span>
+                  <span className="text-sm leading-6 text-muted">
+                    {t.detail}
+                  </span>
+                </Link>
+              </li>
+            ))}
+          </ul>
+        </section>
+
+        <footer className="mt-auto border-t border-line pt-6 text-center text-xs text-muted">
+          Encountive Media — the in-house creative studio of Encountive Inc,
+          Department of Sales &amp; Marketing.
         </footer>
       </main>
     </div>

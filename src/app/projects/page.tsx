@@ -50,21 +50,21 @@ export default async function ProjectsPage({
     : rows;
 
   return (
-    <div className="flex flex-1 flex-col items-center bg-zinc-50 font-sans dark:bg-black">
+    <div className="flex flex-1 flex-col items-center font-sans">
       <main className="flex w-full max-w-3xl flex-1 flex-col gap-8 px-6 py-16 sm:px-10">
         <header className="flex flex-col gap-2">
           <Link
             href="/"
-            className="text-sm text-zinc-500 hover:text-zinc-800 dark:hover:text-zinc-300"
+            className="text-sm text-muted transition-colors hover:text-accent"
           >
-            ← Back
+            ← Home
           </Link>
-          <h1 className="text-3xl font-semibold tracking-tight text-zinc-900 dark:text-zinc-50">
+          <h1 className="font-display text-4xl font-semibold tracking-tight text-ink">
             Projects
           </h1>
-          <p className="text-zinc-600 dark:text-zinc-400">
-            Each project has a board of selected images used for carousel
-            generation.
+          <p className="text-muted">
+            Every campaign starts here — each project is a guided journey with
+            its own moodboard, Creative Director, and content pipeline.
           </p>
         </header>
 
@@ -73,14 +73,14 @@ export default async function ProjectsPage({
             type="text"
             name="name"
             required
-            placeholder="New project name…"
-            className="flex-1 rounded-full border border-zinc-300 bg-white px-4 py-2 text-sm text-zinc-900 outline-none focus:border-zinc-500 dark:border-zinc-700 dark:bg-zinc-950 dark:text-zinc-100"
+            placeholder="Name your next campaign…"
+            className="flex-1 rounded-full border border-line bg-surface px-4 py-2 text-sm text-ink outline-none transition-colors focus:border-accent"
           />
           <button
             type="submit"
-            className="rounded-full bg-zinc-900 px-5 py-2 text-sm font-medium text-white hover:bg-zinc-700 dark:bg-zinc-100 dark:text-zinc-900 dark:hover:bg-zinc-300"
+            className="rounded-full bg-accent px-5 py-2 text-sm font-medium text-white transition-colors hover:bg-accent-strong dark:text-ink"
           >
-            Create
+            Start project
           </button>
         </form>
 
@@ -91,8 +91,8 @@ export default async function ProjectsPage({
               !REQUEST_STATUSES.includes(
                 statusFilter as (typeof REQUEST_STATUSES)[number],
               )
-                ? "bg-zinc-900 text-white dark:bg-zinc-100 dark:text-zinc-900"
-                : "border border-zinc-300 text-zinc-600 hover:bg-zinc-100 dark:border-zinc-700 dark:text-zinc-400 dark:hover:bg-zinc-900"
+                ? "bg-accent text-white dark:text-ink"
+                : "border border-line text-muted hover:border-accent hover:text-accent"
             }`}
           >
             All
@@ -103,8 +103,8 @@ export default async function ProjectsPage({
               href={`/projects?status=${s}`}
               className={`rounded-full px-3 py-1 text-xs font-medium ${
                 statusFilter === s
-                  ? "bg-zinc-900 text-white dark:bg-zinc-100 dark:text-zinc-900"
-                  : "border border-zinc-300 text-zinc-600 hover:bg-zinc-100 dark:border-zinc-700 dark:text-zinc-400 dark:hover:bg-zinc-900"
+                  ? "bg-accent text-white dark:text-ink"
+                  : "border border-line text-muted hover:border-accent hover:text-accent"
               }`}
             >
               {s.replace("_", " ")}
@@ -113,7 +113,7 @@ export default async function ProjectsPage({
         </nav>
 
         {filtered.length === 0 ? (
-          <div className="rounded-xl border border-dashed border-zinc-300 py-16 text-center text-zinc-600 dark:border-zinc-700 dark:text-zinc-400">
+          <div className="rounded-2xl border border-dashed border-line py-16 text-center text-muted">
             {rows.length === 0
               ? "No projects yet. Create your first one above."
               : `No projects have a ${statusFilter.replace("_", " ")} carousel.`}
@@ -126,9 +126,9 @@ export default async function ProjectsPage({
                 <li key={p.id}>
                   <Link
                     href={`/projects/${p.id}`}
-                    className="flex items-center justify-between gap-4 rounded-lg border border-zinc-200 bg-white px-4 py-3 hover:border-zinc-300 dark:border-zinc-800 dark:bg-zinc-950 dark:hover:border-zinc-700"
+                    className="flex items-center justify-between gap-4 rounded-xl border border-line bg-surface px-4 py-3 transition-colors hover:border-accent/60"
                   >
-                    <span className="min-w-0 truncate font-medium text-zinc-900 dark:text-zinc-100">
+                    <span className="min-w-0 truncate font-medium text-ink">
                       {p.name}
                     </span>
                     <span className="flex shrink-0 items-center gap-1.5">
@@ -141,7 +141,7 @@ export default async function ProjectsPage({
                           {p.counts[s]} {s.replace("_", " ")}
                         </span>
                       ))}
-                      <span className="text-sm text-zinc-500">
+                      <span className="text-sm text-muted">
                         {count} image{count === 1 ? "" : "s"}
                       </span>
                     </span>

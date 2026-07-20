@@ -1,26 +1,70 @@
 @import "tailwindcss";
 
+/*
+ * Encountive Media design tokens.
+ *
+ * A warm editorial palette: paper-like canvas, deep ink, and a violet accent
+ * with a gold highlight. Every token has a light and a dark value; utilities
+ * below (bg-canvas, text-ink, border-line, …) adapt automatically, so pages
+ * don't need dark: variants for the core surfaces.
+ */
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
-}
-
-@theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
+  --canvas: #f7f5f2;
+  --surface: #ffffff;
+  --surface-raised: #fdfcfa;
+  --ink: #211d1a;
+  --muted: #6f6861;
+  --line: #e7e2db;
+  --accent: #6d28d9;
+  --accent-strong: #5b21b6;
+  --accent-soft: #f1eafc;
+  --accent-ink: #4c1d95;
+  --gold: #b45309;
+  --gold-soft: #faf3e6;
 }
 
 @media (prefers-color-scheme: dark) {
   :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
+    --canvas: #131015;
+    --surface: #1c181f;
+    --surface-raised: #221d26;
+    --ink: #f2efe9;
+    --muted: #a69e94;
+    --line: #2e2833;
+    --accent: #a78bfa;
+    --accent-strong: #c4b0fc;
+    --accent-soft: #2b2140;
+    --accent-ink: #d6c6fe;
+    --gold: #e0a04c;
+    --gold-soft: #322815;
   }
 }
 
+@theme inline {
+  --color-canvas: var(--canvas);
+  --color-surface: var(--surface);
+  --color-surface-raised: var(--surface-raised);
+  --color-ink: var(--ink);
+  --color-muted: var(--muted);
+  --color-line: var(--line);
+  --color-accent: var(--accent);
+  --color-accent-strong: var(--accent-strong);
+  --color-accent-soft: var(--accent-soft);
+  --color-accent-ink: var(--accent-ink);
+  --color-gold: var(--gold);
+  --color-gold-soft: var(--gold-soft);
+  --font-sans: var(--font-geist-sans);
+  --font-mono: var(--font-geist-mono);
+  --font-display: var(--font-fraunces);
+}
+
 body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  background: var(--canvas);
+  color: var(--ink);
+  font-family: var(--font-geist-sans), ui-sans-serif, system-ui, sans-serif;
+}
+
+::selection {
+  background: var(--accent);
+  color: #ffffff;
 }

@@ -5,6 +5,7 @@ import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { getProfile } from "@/lib/auth";
 import { generateCarousel } from "@/lib/carousel";
+import { askCreativeDirector } from "@/lib/gemini";
 
 /** Create a project in the current user's org, then open its board. */
 export async function createProject(formData: FormData) {
@@ -234,6 +235,115 @@ export async function duplicateRequest(requestId: string, projectId: string) {
   redirect(
     `/projects/${projectId}/requests/${copy.id}?notice=${encodeURIComponent("Duplicated — generate when ready.")}`,
   );
+}
+
+/**
+ * Ask the project's Creative Director agent for design direction. Saves the
+ * user's question, calls Gemini with the project's moodboard, brand voice,
+ * carousel pipeline, and conversation history as context, then saves the
+ * agent's reply. On a Gemini failure the question is kept and the user is
+ * sent back with an error notice, so nothing typed is ever lost.
+ */
+export async function askProjectCreativeDirector(
+  projectId: string,
+  formData: FormData,
+) {
+  const question = String(formData.get("question") ?? "").trim();
+  if (!question) return;
+
+  const ctx = await getProfile();
+  if (!ctx) redirect("/login");
+
+  const supabase = await createClient();
+
+  const { data: project } = await supabase
+    .from("projects")
+    .select("id, name")
+    .eq("id", projectId)
+    .single();
+  if (!project) return;
+
+  // Context: moodboard images, carousels in flight, brand voice, and the
+  // conversation so far (last 20 turns keeps the prompt bounded).
+  const [{ data: boardRows }, { data: requests }, { data: kit }, { data: history }] =
+    await Promise.all([
+      supabase
+        .from("project_assets")
+        .select("assets(title, description)")
+        .eq("project_id", projectId)
+        .order("position", { ascending: true }),
+      supabase
+        .from("content_requests")
+        .select("topic, target_platform, status")
+        .eq("project_id", projectId)
+        .order("created_at", { ascending: false }),
+      supabase
+        .from("brand_kits")
+        .select("voice_guidelines")
+        .eq("org_id", ctx.profile.org_id)
+        .order("created_at")
+        .limit(1)
+        .maybeSingle(),
+      supabase
+        .from("project_agent_messages")
+        .select("role, body")
+        .eq("project_id", projectId)
+        .order("created_at", { ascending: false })
+        .limit(20),
+    ]);
+
+  const boardSummary =
+    (boardRows ?? [])
+      .map((r) => r.assets as { title: string | null; description: string | null } | null)
+      .filter((a): a is { title: string | null; description: string | null } =>
+        Boolean(a),
+      )
+      .map((a) => `- ${a.title ?? "Untitled"}: ${a.description ?? "(no description)"}`)
+      .join("\n") || null;
+
+  const requestsSummary =
+    (requests ?? [])
+      .map((r) => `- "${r.topic ?? "Untitled"}" for ${r.target_platform ?? "social"} (${r.status})`)
+      .join("\n") || null;
+
+  const { error: insertError } = await supabase
+    .from("project_agent_messages")
+    .insert({
+      project_id: projectId,
+      author_id: ctx.profile.id,
+      role: "user",
+      body: question,
+    });
+  if (insertError) throw new Error(insertError.message);
+  revalidatePath(`/projects/${projectId}`);
+
+  let reply: string;
+  try {
+    reply = await askCreativeDirector({
+      projectName: project.name,
+      boardSummary,
+      requestsSummary,
+      voiceGuidelines: kit?.voice_guidelines ?? null,
+      history: (history ?? [])
+        .reverse()
+        .map((m) => ({ role: m.role as "user" | "agent", body: m.body })),
+      question,
+    });
+  } catch {
+    redirect(
+      `/projects/${projectId}?agent_error=${encodeURIComponent(
+        "The Creative Director couldn't answer just now — your question was saved, ask again in a moment.",
+      )}#creative-director`,
+    );
+  }
+
+  const { error: replyError } = await supabase
+    .from("project_agent_messages")
+    .insert({ project_id: projectId, role: "agent", body: reply });
+  if (replyError) throw new Error(replyError.message);
+
+  revalidatePath(`/projects/${projectId}`);
+  redirect(`/projects/${projectId}#creative-director`);
 }
 
 /** Remove a single asset from a project board. */
