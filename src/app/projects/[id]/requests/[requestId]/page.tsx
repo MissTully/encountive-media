@@ -9,7 +9,8 @@ import {
   generateCarouselNow,
   setCarouselAudio,
 } from "../../../actions";
-import { VideoPreview, type PreviewSlide } from "./video-preview";
+import { createVideoFromCarousel } from "../../../../videos/actions";
+import { VideoPreview, type PreviewSlide } from "@/components/video-preview";
 
 export const dynamic = "force-dynamic";
 // In-app generation (copy + per-slide embedding/selection, optional image
@@ -61,8 +62,13 @@ export default async function RequestDetailPage({
     .limit(1)
     .maybeSingle();
 
-  let slides: Array<SlideRow & { bgUrl: string | null; renderUrl: string | null }> =
-    [];
+  let slides: Array<
+    SlideRow & {
+      bgUrl: string | null;
+      renderUrl: string | null;
+      downloadUrl: string | null;
+    }
+  > = [];
   if (carousel) {
     const { data: slideRows } = await supabase
       .from("slides")
@@ -80,16 +86,22 @@ export default async function RequestDetailPage({
           bgUrl = data?.signedUrl ?? null;
         }
         let renderUrl: string | null = null;
+        let downloadUrl: string | null = null;
         if (s.render_path?.startsWith("http")) {
           // Creatomate returns a hosted CDN URL; use it directly.
           renderUrl = s.render_path;
+          downloadUrl = s.render_path;
         } else if (s.render_path) {
-          const { data } = await supabase.storage
-            .from("renders")
-            .createSignedUrl(s.render_path, 3600);
-          renderUrl = data?.signedUrl ?? null;
+          const [{ data: view }, { data: dl }] = await Promise.all([
+            supabase.storage.from("renders").createSignedUrl(s.render_path, 3600),
+            supabase.storage.from("renders").createSignedUrl(s.render_path, 3600, {
+              download: `slide-${s.position + 1}.png`,
+            }),
+          ]);
+          renderUrl = view?.signedUrl ?? null;
+          downloadUrl = dl?.signedUrl ?? null;
         }
-        return { ...s, bgUrl, renderUrl };
+        return { ...s, bgUrl, renderUrl, downloadUrl };
       }),
     );
   }
@@ -131,6 +143,7 @@ export default async function RequestDetailPage({
     bodyCopy: s.body_copy,
     imageUrl: s.renderUrl ?? s.bgUrl,
     isRendered: s.renderUrl !== null,
+    durationSeconds: 4,
   }));
 
   return (
@@ -233,14 +246,24 @@ export default async function RequestDetailPage({
 
         {carousel && slides.length > 0 && (
           <section className="flex flex-col gap-4 rounded-xl border border-zinc-200 bg-white p-4 sm:p-6 dark:border-zinc-800 dark:bg-zinc-950">
-            <div className="flex flex-col gap-1">
-              <h2 className="text-lg font-semibold text-zinc-900 dark:text-zinc-100">
-                Video preview
-              </h2>
-              <p className="text-sm text-zinc-500">
-                How the finished video will look and sound — each slide holds
-                for a few seconds over your chosen soundtrack.
-              </p>
+            <div className="flex items-start justify-between gap-3">
+              <div className="flex flex-col gap-1">
+                <h2 className="text-lg font-semibold text-zinc-900 dark:text-zinc-100">
+                  Video preview
+                </h2>
+                <p className="text-sm text-zinc-500">
+                  How the finished video will look and sound — each slide holds
+                  for a few seconds over your chosen soundtrack.
+                </p>
+              </div>
+              <form action={createVideoFromCarousel.bind(null, requestId, id)}>
+                <button
+                  type="submit"
+                  className="shrink-0 rounded-full bg-zinc-900 px-4 py-2 text-sm font-medium text-white hover:bg-zinc-700 dark:bg-zinc-100 dark:text-zinc-900 dark:hover:bg-zinc-300"
+                >
+                  Turn into video →
+                </button>
+              </form>
             </div>
 
             <VideoPreview
@@ -317,7 +340,7 @@ export default async function RequestDetailPage({
                     </div>
                   )}
                 </div>
-                <div className="flex flex-col gap-1">
+                <div className="flex min-w-0 flex-1 flex-col gap-1">
                   <span className="text-xs uppercase tracking-widest text-zinc-400">
                     Slide {s.position + 1}
                   </span>
@@ -327,6 +350,16 @@ export default async function RequestDetailPage({
                   <p className="text-sm text-zinc-600 dark:text-zinc-400">
                     {s.body_copy ?? ""}
                   </p>
+                  {s.downloadUrl && (
+                    <a
+                      href={s.downloadUrl}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="mt-auto self-start text-xs font-medium text-zinc-500 underline hover:text-zinc-800 dark:hover:text-zinc-300"
+                    >
+                      ⬇ Download slide
+                    </a>
+                  )}
                 </div>
               </li>
             ))}

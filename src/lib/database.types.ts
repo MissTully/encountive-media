@@ -423,6 +423,118 @@ export type Database = {
           },
         ]
       }
+      video_clips: {
+        Row: {
+          asset_id: string | null
+          body_copy: string | null
+          created_at: string
+          duration_seconds: number
+          headline: string | null
+          id: string
+          position: number
+          video_id: string
+        }
+        Insert: {
+          asset_id?: string | null
+          body_copy?: string | null
+          created_at?: string
+          duration_seconds?: number
+          headline?: string | null
+          id?: string
+          position?: number
+          video_id: string
+        }
+        Update: {
+          asset_id?: string | null
+          body_copy?: string | null
+          created_at?: string
+          duration_seconds?: number
+          headline?: string | null
+          id?: string
+          position?: number
+          video_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "video_clips_asset_id_fkey"
+            columns: ["asset_id"]
+            isOneToOne: false
+            referencedRelation: "assets"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "video_clips_video_id_fkey"
+            columns: ["video_id"]
+            isOneToOne: false
+            referencedRelation: "videos"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      videos: {
+        Row: {
+          audio_asset_id: string | null
+          created_at: string
+          height: number
+          id: string
+          org_id: string
+          output_path: string | null
+          project_id: string | null
+          render_error: string | null
+          status: string
+          title: string
+          width: number
+        }
+        Insert: {
+          audio_asset_id?: string | null
+          created_at?: string
+          height?: number
+          id?: string
+          org_id: string
+          output_path?: string | null
+          project_id?: string | null
+          render_error?: string | null
+          status?: string
+          title?: string
+          width?: number
+        }
+        Update: {
+          audio_asset_id?: string | null
+          created_at?: string
+          height?: number
+          id?: string
+          org_id?: string
+          output_path?: string | null
+          project_id?: string | null
+          render_error?: string | null
+          status?: string
+          title?: string
+          width?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "videos_audio_asset_id_fkey"
+            columns: ["audio_asset_id"]
+            isOneToOne: false
+            referencedRelation: "audio_assets"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "videos_org_id_fkey"
+            columns: ["org_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "videos_project_id_fkey"
+            columns: ["project_id"]
+            isOneToOne: false
+            referencedRelation: "projects"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
     }
     Views: {
       [_ in never]: never

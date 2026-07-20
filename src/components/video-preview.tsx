@@ -10,12 +10,9 @@ export interface PreviewSlide {
   imageUrl: string | null;
   /** True when imageUrl is a finished render (text already baked in). */
   isRendered: boolean;
+  /** How long this slide holds on screen. */
+  durationSeconds: number;
 }
-
-// Playback pacing and canvas size of the final video (4:5 portrait feed).
-const SECONDS_PER_SLIDE = 4;
-const CANVAS_W = 1080;
-const CANVAS_H = 1350;
 
 function formatClock(seconds: number): string {
   const total = Math.max(0, Math.floor(seconds));
@@ -23,20 +20,26 @@ function formatClock(seconds: number): string {
 }
 
 /**
- * Plays the carousel as the finished video would look: each slide holds for a
- * few seconds on a 1080x1350 canvas (crossfading between slides) while the
- * selected soundtrack plays underneath. Slides without a finished render are
- * composited live with the same layout Creatomate uses (dark overlay,
- * headline, body), so the preview approximates the final form either way.
+ * Plays a sequence of slides the way the finished video will look: each slide
+ * holds for its duration on a real-size canvas (crossfading between slides)
+ * while the selected soundtrack plays underneath. Slides without a finished
+ * render are composited live with the same layout Creatomate renders with
+ * (dark overlay, headline, body), so the preview approximates the final form
+ * either way. Text sizes are authored at 1080-wide scale and the whole canvas
+ * is scaled to fit, so proportions match the output exactly.
  */
 export function VideoPreview({
   slides,
   audioUrl,
   audioLabel,
+  canvasWidth = 1080,
+  canvasHeight = 1350,
 }: {
   slides: PreviewSlide[];
   audioUrl: string | null;
   audioLabel: string | null;
+  canvasWidth?: number;
+  canvasHeight?: number;
 }) {
   const [playing, setPlaying] = useState(false);
   const [elapsed, setElapsed] = useState(0);
@@ -46,23 +49,36 @@ export function VideoPreview({
   const audioRef = useRef<HTMLAudioElement>(null);
   const startedAtRef = useRef<number>(0);
 
-  const totalSeconds = slides.length * SECONDS_PER_SLIDE;
-  const current = Math.min(
-    Math.floor(elapsed / SECONDS_PER_SLIDE),
-    slides.length - 1,
-  );
+  // Caption sizes are authored relative to a 1080-wide canvas (the carousel
+  // format Creatomate renders: 72px headline / 38px body).
+  const fontScale = canvasWidth / 1080;
 
-  // The stage renders at the real 1080x1350 canvas size and is scaled down to
-  // fit its container, so text proportions match the final output exactly.
+  // Cumulative start time of each slide, so durations can vary per slide.
+  const starts: number[] = [];
+  let totalSeconds = 0;
+  for (const s of slides) {
+    starts.push(totalSeconds);
+    totalSeconds += s.durationSeconds;
+  }
+  let current = slides.length - 1;
+  for (let i = 0; i < slides.length; i++) {
+    if (elapsed < starts[i] + slides[i].durationSeconds) {
+      current = i;
+      break;
+    }
+  }
+
+  // The stage renders at the real canvas size and is scaled down to fit its
+  // container, so text proportions match the final output exactly.
   useEffect(() => {
     const el = stageRef.current;
     if (!el) return;
-    const update = () => setScale(el.clientWidth / CANVAS_W);
+    const update = () => setScale(el.clientWidth / canvasWidth);
     update();
     const ro = new ResizeObserver(update);
     ro.observe(el);
     return () => ro.disconnect();
-  }, []);
+  }, [canvasWidth]);
 
   // Drive the timeline while playing; stop at the end of the last slide.
   useEffect(() => {
@@ -116,13 +132,13 @@ export function VideoPreview({
       <div
         ref={stageRef}
         className="relative w-full max-w-sm overflow-hidden rounded-xl bg-black shadow-lg"
-        style={{ aspectRatio: `${CANVAS_W} / ${CANVAS_H}` }}
+        style={{ aspectRatio: `${canvasWidth} / ${canvasHeight}` }}
       >
         <div
           className="absolute left-0 top-0 origin-top-left"
           style={{
-            width: CANVAS_W,
-            height: CANVAS_H,
+            width: canvasWidth,
+            height: canvasHeight,
             transform: `scale(${scale})`,
           }}
         >
@@ -144,7 +160,7 @@ export function VideoPreview({
               )}
               {/* Mirror the Creatomate composition for un-rendered slides:
                   dark overlay, 72px headline above 42%, 38px body below 48%. */}
-              {!s.isRendered && (
+              {!s.isRendered && (s.headline || s.bodyCopy) && (
                 <>
                   <div className="absolute inset-0 bg-black/45" />
                   <div
@@ -153,7 +169,7 @@ export function VideoPreview({
                   >
                     <span
                       className="font-bold text-white"
-                      style={{ fontSize: 72, lineHeight: 1.15 }}
+                      style={{ fontSize: 72 * fontScale, lineHeight: 1.15 }}
                     >
                       {s.headline ?? ""}
                     </span>
@@ -164,7 +180,7 @@ export function VideoPreview({
                   >
                     <span
                       className="text-zinc-100"
-                      style={{ fontSize: 38, lineHeight: 1.4 }}
+                      style={{ fontSize: 38 * fontScale, lineHeight: 1.4 }}
                     >
                       {s.bodyCopy ?? ""}
                     </span>
@@ -178,15 +194,15 @@ export function VideoPreview({
         {/* Per-slide progress segments, like a story player. */}
         <div className="absolute left-2 right-2 top-2 flex gap-1">
           {slides.map((s, i) => {
-            const start = i * SECONDS_PER_SLIDE;
             const fill = Math.min(
-              Math.max((elapsed - start) / SECONDS_PER_SLIDE, 0),
+              Math.max((elapsed - starts[i]) / s.durationSeconds, 0),
               1,
             );
             return (
               <div
                 key={s.id}
-                className="h-1 flex-1 overflow-hidden rounded-full bg-white/30"
+                className="h-1 overflow-hidden rounded-full bg-white/30"
+                style={{ flexGrow: s.durationSeconds }}
               >
                 <div
                   className="h-full bg-white"
