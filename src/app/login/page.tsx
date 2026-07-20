@@ -1,5 +1,6 @@
 "use client";
 
+import Image from "next/image";
 import { useState } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { hasSupabaseConfig } from "@/lib/env";
@@ -32,6 +33,13 @@ export default function LoginPage() {
     <div className="flex flex-1 flex-col items-center justify-center px-6 font-sans">
       <div className="flex w-full max-w-sm flex-col gap-6 rounded-2xl border border-line bg-surface p-8">
         <div className="flex flex-col gap-2">
+          <Image
+            src="/logo.svg"
+            alt="Encountive Media logo"
+            width={48}
+            height={48}
+            className="mb-1"
+          />
           <span className="text-[11px] font-medium uppercase tracking-[0.2em] text-muted">
             Encountive Inc · Sales &amp; Marketing
           </span>

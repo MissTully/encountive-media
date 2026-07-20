@@ -1,0 +1,21 @@
+<svg width="200" height="200" viewBox="0 0 200 200" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <!-- Rounded square background -->
+  <rect width="200" height="200" rx="44" fill="#6d28d9"/>
+
+  <!-- "E" letterform — thick vertical stem + three horizontal bars -->
+  <rect x="42" y="60" width="14" height="80" rx="7" fill="white"/>
+  <rect x="42" y="60" width="62" height="14" rx="7" fill="white"/>
+  <rect x="42" y="93" width="50" height="13" rx="6.5" fill="white"/>
+  <rect x="42" y="126" width="62" height="14" rx="7" fill="white"/>
+
+  <!-- "M" letterform — two outer stems + a chevron-peak in the middle -->
+  <rect x="112" y="60" width="14" height="80" rx="7" fill="white"/>
+  <rect x="174" y="60" width="14" height="80" rx="7" fill="white"/>
+  <!-- Left diagonal of M -->
+  <line x1="119" y1="60" x2="150" y2="105" stroke="white" stroke-width="14" stroke-linecap="round"/>
+  <!-- Right diagonal of M -->
+  <line x1="181" y1="60" x2="150" y2="105" stroke="white" stroke-width="14" stroke-linecap="round"/>
+
+  <!-- Small AI spark / four-point star in top-right corner -->
+  <path d="M168 34 L171 42 L179 45 L171 48 L168 56 L165 48 L157 45 L165 42 Z" fill="#c4b0fc"/>
+</svg>
