@@ -44,6 +44,17 @@ const PHASES = [
     detail: "Human approves each carousel before it can be published.",
     done: true,
   },
+  {
+    title: "Music library",
+    detail: "Upload and manage soundtrack audio alongside the image library.",
+    done: true,
+  },
+  {
+    title: "Video editor",
+    detail:
+      "Assemble clips + music into marketing videos; preview, render to MP4, download.",
+    done: true,
+  },
 ];
 
 export default async function Home() {
@@ -95,9 +106,10 @@ export default async function Home() {
             Content Studio
           </h1>
           <p className="max-w-xl text-lg leading-8 text-zinc-600 dark:text-zinc-400">
-            Generate on-brand social-media carousels: a reuse-aware image
-            library, AI-written copy, and editable text rendered over clean
-            visuals. Built multi-tenant from day one.
+            Generate on-brand social-media carousels and marketing videos: a
+            reuse-aware image library, a music library, AI-written copy, and a
+            video editor that renders downloadable MP4s. Built multi-tenant
+            from day one.
           </p>
           {email && (
             <nav className="flex gap-3">
@@ -112,6 +124,18 @@ export default async function Home() {
                 className="rounded-full border border-zinc-300 px-4 py-2 text-sm font-medium text-zinc-800 hover:bg-zinc-100 dark:border-zinc-700 dark:text-zinc-200 dark:hover:bg-zinc-800"
               >
                 Asset library
+              </Link>
+              <Link
+                href="/music"
+                className="rounded-full border border-zinc-300 px-4 py-2 text-sm font-medium text-zinc-800 hover:bg-zinc-100 dark:border-zinc-700 dark:text-zinc-200 dark:hover:bg-zinc-800"
+              >
+                Music library
+              </Link>
+              <Link
+                href="/videos"
+                className="rounded-full border border-zinc-300 px-4 py-2 text-sm font-medium text-zinc-800 hover:bg-zinc-100 dark:border-zinc-700 dark:text-zinc-200 dark:hover:bg-zinc-800"
+              >
+                Videos
               </Link>
               <Link
                 href="/projects"
