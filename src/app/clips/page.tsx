@@ -142,6 +142,7 @@ export default async function ClipLibraryPage({
                     >
                       <input type="hidden" name="id" value={c.id} />
                       <input
+                        key={c.title ?? ""}
                         name="title"
                         defaultValue={c.title ?? ""}
                         placeholder="Untitled clip"

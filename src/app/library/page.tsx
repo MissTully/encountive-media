@@ -306,6 +306,7 @@ export default async function LibraryPage({
                     >
                       <input type="hidden" name="id" value={a.id} />
                       <input
+                        key={a.title ?? ""}
                         name="title"
                         defaultValue={a.title ?? ""}
                         placeholder="Untitled"

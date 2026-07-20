@@ -121,6 +121,11 @@ export async function setCarouselAudio(
   if (error) throw new Error(error.message);
 
   revalidatePath(`/projects/${projectId}/requests/${requestId}`);
+  redirect(
+    `/projects/${projectId}/requests/${requestId}?notice=${encodeURIComponent(
+      audioAssetId ? "Saved — soundtrack attached." : "Soundtrack cleared.",
+    )}`,
+  );
 }
 
 /** Approve a carousel that's in review (human approval before publishing). */

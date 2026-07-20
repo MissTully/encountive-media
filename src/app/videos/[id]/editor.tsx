@@ -130,7 +130,11 @@ export function Editor({
           className="flex flex-col gap-3"
         >
           <div className="flex flex-wrap items-center gap-3">
+            {/* key: after a form action React resets uncontrolled fields to
+                their defaultValue-at-render — keying by the saved value forces
+                a remount to the fresh server state instead of the stale one. */}
             <input
+              key={video.title}
               name="title"
               defaultValue={video.title}
               aria-label="Video title"
@@ -156,6 +160,7 @@ export function Editor({
               Soundtrack
             </label>
             <select
+              key={video.audioAssetId ?? "none"}
               id="audio_asset_id"
               name="audio_asset_id"
               defaultValue={video.audioAssetId ?? ""}
@@ -422,12 +427,14 @@ export function Editor({
                     className="flex min-w-0 flex-1 flex-col gap-1.5"
                   >
                     <input
+                      key={c.headline ?? ""}
                       name="headline"
                       defaultValue={c.headline ?? ""}
                       placeholder="Headline (overlaid on the clip)"
                       className="rounded-md border border-zinc-200 bg-transparent px-2 py-1 text-sm font-medium text-zinc-900 focus:border-zinc-400 focus:outline-none dark:border-zinc-800 dark:text-zinc-100 dark:focus:border-zinc-600"
                     />
                     <input
+                      key={c.bodyCopy ?? ""}
                       name="body_copy"
                       defaultValue={c.bodyCopy ?? ""}
                       placeholder="Body copy (optional)"
@@ -437,6 +444,7 @@ export function Editor({
                       <label className="flex items-center gap-1.5 text-xs text-zinc-500">
                         Hold
                         <input
+                          key={c.durationSeconds}
                           name="duration_seconds"
                           type="number"
                           min={1}

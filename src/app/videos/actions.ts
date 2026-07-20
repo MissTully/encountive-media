@@ -92,6 +92,11 @@ export async function updateVideoSettings(videoId: string, formData: FormData) {
   if (error) throw new Error(error.message);
 
   revalidatePath(`/videos/${videoId}`);
+  redirect(
+    `/videos/${videoId}?notice=${encodeURIComponent(
+      audioAssetId ? "Saved — soundtrack attached." : "Saved.",
+    )}`,
+  );
 }
 
 /**
