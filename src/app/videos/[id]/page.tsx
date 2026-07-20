@@ -2,7 +2,9 @@ import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 import { getProfile } from "@/lib/auth";
 import { createClient } from "@/lib/supabase/server";
-import { hasCreatomateKey } from "@/lib/video";
+import { hasCreatomateKey } from "@/lib/creatomate";
+import { trackLabel } from "@/lib/format";
+import { firstParam } from "@/lib/search";
 import { Editor, type EditorClip } from "./editor";
 
 // Always render fresh so clip edits and render status reflect live data.
@@ -20,95 +22,97 @@ export default async function VideoEditorPage({
   searchParams,
 }: {
   params: Promise<{ id: string }>;
-  searchParams: Promise<{ notice?: string }>;
+  searchParams: Promise<{ notice?: string | string[] }>;
 }) {
   const { id } = await params;
-  const notice = ((await searchParams).notice ?? "").trim();
+  const notice = firstParam((await searchParams).notice).trim();
   const ctx = await getProfile();
   if (!ctx) redirect("/login");
 
   const supabase = await createClient();
 
-  const { data: video } = await supabase
-    .from("videos")
-    .select(
-      "id, title, status, width, height, audio_asset_id, output_path, render_error",
-    )
-    .eq("id", id)
-    .single();
+  // The video, its clips, the picker's library images, and the music tracks
+  // are independent — fetch them in parallel.
+  const [{ data: video }, { data: clipRows }, { data: assetRows }, { data: trackRows }] =
+    await Promise.all([
+      supabase
+        .from("videos")
+        .select(
+          "id, title, status, width, height, audio_asset_id, output_path, render_error",
+        )
+        .eq("id", id)
+        .single(),
+      supabase
+        .from("video_clips")
+        .select(
+          "id, position, headline, body_copy, duration_seconds, assets(storage_path)",
+        )
+        .eq("video_id", id)
+        .order("position", { ascending: true })
+        .order("created_at", { ascending: true }),
+      supabase
+        .from("assets")
+        .select("id, storage_path, title")
+        .eq("status", "ready")
+        .order("created_at", { ascending: false })
+        .limit(PICKER_LIMIT),
+      supabase
+        .from("audio_assets")
+        .select("id, title, artist, storage_path")
+        .eq("status", "ready")
+        .order("created_at", { ascending: false }),
+    ]);
   if (!video) notFound();
 
-  // Timeline clips with signed thumbnails.
-  const { data: clipRows } = await supabase
-    .from("video_clips")
-    .select(
-      "id, position, headline, body_copy, duration_seconds, assets(storage_path)",
-    )
-    .eq("video_id", id)
-    .order("position", { ascending: true });
-
-  const clips: EditorClip[] = await Promise.all(
-    (clipRows ?? []).map(async (c) => {
-      const storagePath = (c.assets as { storage_path: string } | null)
-        ?.storage_path;
-      let imageUrl: string | null = null;
-      if (storagePath) {
-        const { data } = await supabase.storage
+  // Sign clip thumbnails + picker thumbnails in one batch per set.
+  const clipPaths = (clipRows ?? []).map(
+    (c) => (c.assets as { storage_path: string } | null)?.storage_path ?? null,
+  );
+  const [clipSigned, pickerSigned] = await Promise.all([
+    clipPaths.some(Boolean)
+      ? supabase.storage
           .from("assets")
-          .createSignedUrl(storagePath, 3600);
-        imageUrl = data?.signedUrl ?? null;
-      }
-      return {
-        id: c.id,
-        position: c.position,
-        headline: c.headline,
-        bodyCopy: c.body_copy,
-        durationSeconds: Number(c.duration_seconds),
-        imageUrl,
-      };
-    }),
-  );
+          .createSignedUrls(clipPaths.filter((p): p is string => p !== null), 3600)
+      : Promise.resolve({ data: [] as Array<{ signedUrl: string }> }),
+    assetRows?.length
+      ? supabase.storage
+          .from("assets")
+          .createSignedUrls(assetRows.map((a) => a.storage_path), 3600)
+      : Promise.resolve({ data: [] as Array<{ signedUrl: string }> }),
+  ]);
 
-  // Recent ready library images for the picker.
-  const { data: assetRows } = await supabase
-    .from("assets")
-    .select("id, storage_path, title")
-    .eq("status", "ready")
-    .order("created_at", { ascending: false })
-    .limit(PICKER_LIMIT);
-  const pickerAssets = await Promise.all(
-    (assetRows ?? []).map(async (a) => {
-      const { data } = await supabase.storage
-        .from("assets")
-        .createSignedUrl(a.storage_path, 3600);
-      return { id: a.id, title: a.title, url: data?.signedUrl ?? null };
-    }),
-  );
+  let signedIndex = 0;
+  const clips: EditorClip[] = (clipRows ?? []).map((c, i) => ({
+    id: c.id,
+    headline: c.headline,
+    bodyCopy: c.body_copy,
+    durationSeconds: Number(c.duration_seconds),
+    imageUrl: clipPaths[i]
+      ? (clipSigned.data?.[signedIndex++]?.signedUrl ?? null)
+      : null,
+  }));
 
-  // Music library tracks + a signed URL for the selected soundtrack.
-  const { data: trackRows } = await supabase
-    .from("audio_assets")
-    .select("id, title, artist")
-    .eq("status", "ready")
-    .order("created_at", { ascending: false });
+  const pickerAssets = (assetRows ?? []).map((a, i) => ({
+    id: a.id,
+    title: a.title,
+    url: pickerSigned.data?.[i]?.signedUrl ?? null,
+  }));
+
+  // Music tracks for the soundtrack picker + a signed URL for the selection.
   const tracks = (trackRows ?? []).map((t) => ({
     id: t.id,
-    label: [t.title ?? "Untitled", t.artist].filter(Boolean).join(" — "),
+    label: trackLabel(t.title, t.artist),
   }));
 
   let audioUrl: string | null = null;
-  if (video.audio_asset_id) {
-    const { data: audioRow } = await supabase
-      .from("audio_assets")
-      .select("storage_path")
-      .eq("id", video.audio_asset_id)
-      .single();
-    if (audioRow) {
-      const { data } = await supabase.storage
-        .from("audio")
-        .createSignedUrl(audioRow.storage_path, 3600);
-      audioUrl = data?.signedUrl ?? null;
-    }
+  const selectedTrack = (trackRows ?? []).find(
+    (t) => t.id === video.audio_asset_id,
+  );
+  if (selectedTrack) {
+    const { data } = await supabase.storage
+      .from("audio")
+      .createSignedUrl(selectedTrack.storage_path, 3600);
+    audioUrl = data?.signedUrl ?? null;
   }
 
   // The finished MP4: one URL to play inline, one that downloads as a file.

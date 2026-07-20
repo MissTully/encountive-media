@@ -3,16 +3,10 @@ import { redirect } from "next/navigation";
 import { getProfile } from "@/lib/auth";
 import { createClient } from "@/lib/supabase/server";
 import { createVideo, deleteVideo } from "./actions";
+import { VIDEO_STATUS_STYLES } from "./status";
 
 // Always render fresh so statuses reflect live render state.
 export const dynamic = "force-dynamic";
-
-const STATUS_STYLES: Record<string, string> = {
-  draft: "bg-zinc-200 text-zinc-700 dark:bg-zinc-800 dark:text-zinc-300",
-  rendering: "bg-blue-100 text-blue-700 dark:bg-blue-950 dark:text-blue-300",
-  ready: "bg-green-100 text-green-700 dark:bg-green-950 dark:text-green-300",
-  error: "bg-red-100 text-red-700 dark:bg-red-950 dark:text-red-300",
-};
 
 export default async function VideosPage() {
   const ctx = await getProfile();
@@ -106,7 +100,7 @@ export default async function VideosPage() {
                 </div>
                 <span
                   className={`shrink-0 rounded-full px-2.5 py-1 text-xs font-medium ${
-                    STATUS_STYLES[v.status] ?? STATUS_STYLES.draft
+                    VIDEO_STATUS_STYLES[v.status] ?? VIDEO_STATUS_STYLES.draft
                   }`}
                 >
                   {v.status}

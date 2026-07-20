@@ -6,6 +6,15 @@ import { createClient } from "@/lib/supabase/server";
 import { getProfile } from "@/lib/auth";
 import { renderVideo } from "@/lib/video";
 
+// Server actions are reachable via direct POST, not just the UI — every one
+// verifies the session first (RLS is the second line of defense, but it fails
+// silently: an unauthorized update matches zero rows and reports success).
+async function requireProfile() {
+  const ctx = await getProfile();
+  if (!ctx) redirect("/login");
+  return ctx;
+}
+
 // Output formats the editor offers. Keys are stored nowhere — width/height
 // land on the videos row — so adding a format here is enough.
 const FORMATS: Record<string, { width: number; height: number }> = {
@@ -20,8 +29,7 @@ export async function createVideo(formData: FormData) {
   const title = String(formData.get("title") ?? "").trim() || "Untitled video";
   const format = FORMATS[String(formData.get("format") ?? "")] ?? FORMATS.portrait;
 
-  const ctx = await getProfile();
-  if (!ctx) redirect("/login");
+  const ctx = await requireProfile();
 
   const supabase = await createClient();
   const { data, error } = await supabase
@@ -45,17 +53,23 @@ export async function deleteVideo(formData: FormData) {
   const id = String(formData.get("id") ?? "").trim();
   if (!id) return;
 
+  await requireProfile();
+
   const supabase = await createClient();
   const { data: row } = await supabase
     .from("videos")
     .select("output_path")
     .eq("id", id)
     .single();
-  if (row?.output_path) {
-    await supabase.storage.from("renders").remove([row.output_path]);
-  }
+  if (!row) return;
+
+  // Delete the row first — it's the authoritative record. A failed storage
+  // cleanup leaves only an orphaned object, never a dangling reference.
   const { error } = await supabase.from("videos").delete().eq("id", id);
   if (error) throw new Error(error.message);
+  if (row.output_path) {
+    await supabase.storage.from("renders").remove([row.output_path]);
+  }
 
   revalidatePath("/videos");
 }
@@ -64,6 +78,8 @@ export async function deleteVideo(formData: FormData) {
 export async function updateVideoSettings(videoId: string, formData: FormData) {
   const title = String(formData.get("title") ?? "").trim();
   const audioAssetId = String(formData.get("audio_asset_id") ?? "").trim();
+
+  await requireProfile();
 
   const supabase = await createClient();
   const { error } = await supabase
@@ -81,6 +97,8 @@ export async function updateVideoSettings(videoId: string, formData: FormData) {
 /** Append selected library images to the timeline, one clip each. */
 export async function addClipsToVideo(videoId: string, assetIds: string[]) {
   if (assetIds.length === 0) return;
+
+  await requireProfile();
 
   const supabase = await createClient();
   const { count } = await supabase
@@ -112,6 +130,8 @@ export async function updateClip(
   const durationSeconds =
     Number.isFinite(duration) && duration >= 1 && duration <= 15 ? duration : 3;
 
+  await requireProfile();
+
   const supabase = await createClient();
   const { error } = await supabase
     .from("video_clips")
@@ -129,6 +149,8 @@ export async function updateClip(
 
 /** Remove a clip and close the position gap it leaves. */
 export async function removeClip(videoId: string, clipId: string) {
+  await requireProfile();
+
   const supabase = await createClient();
   const { error } = await supabase
     .from("video_clips")
@@ -137,7 +159,26 @@ export async function removeClip(videoId: string, clipId: string) {
     .eq("video_id", videoId);
   if (error) throw new Error(error.message);
 
-  await renumberClips(videoId);
+  // Compact positions to 0..n-1 so ordering stays gap-free and deterministic.
+  const { data: clips } = await supabase
+    .from("video_clips")
+    .select("id, position")
+    .eq("video_id", videoId)
+    .order("position", { ascending: true })
+    .order("created_at", { ascending: true });
+  if (clips) {
+    const results = await Promise.all(
+      clips
+        .map((c, i) => ({ id: c.id, from: c.position, to: i }))
+        .filter((m) => m.from !== m.to)
+        .map((m) =>
+          supabase.from("video_clips").update({ position: m.to }).eq("id", m.id),
+        ),
+    );
+    const failed = results.find((r) => r.error);
+    if (failed?.error) throw new Error(failed.error.message);
+  }
+
   revalidatePath(`/videos/${videoId}`);
 }
 
@@ -147,64 +188,53 @@ export async function moveClip(
   clipId: string,
   direction: "up" | "down",
 ) {
+  await requireProfile();
+
   const supabase = await createClient();
   const { data: clips } = await supabase
     .from("video_clips")
     .select("id, position")
     .eq("video_id", videoId)
-    .order("position", { ascending: true });
+    .order("position", { ascending: true })
+    .order("created_at", { ascending: true });
   if (!clips) return;
 
   const index = clips.findIndex((c) => c.id === clipId);
   const swapWith = direction === "up" ? index - 1 : index + 1;
   if (index === -1 || swapWith < 0 || swapWith >= clips.length) return;
 
-  await Promise.all([
-    supabase
-      .from("video_clips")
-      .update({ position: clips[swapWith].position })
-      .eq("id", clips[index].id),
-    supabase
-      .from("video_clips")
-      .update({ position: clips[index].position })
-      .eq("id", clips[swapWith].id),
-  ]);
+  // Sequential, checked writes: if the first update fails we stop before
+  // touching the second row, so a partial swap can't corrupt the ordering.
+  const first = await supabase
+    .from("video_clips")
+    .update({ position: clips[swapWith].position })
+    .eq("id", clips[index].id);
+  if (first.error) throw new Error(first.error.message);
+  const second = await supabase
+    .from("video_clips")
+    .update({ position: clips[index].position })
+    .eq("id", clips[swapWith].id);
+  if (second.error) throw new Error(second.error.message);
 
   revalidatePath(`/videos/${videoId}`);
-}
-
-/** Compact clip positions to 0..n-1 after a removal. */
-async function renumberClips(videoId: string) {
-  const supabase = await createClient();
-  const { data: clips } = await supabase
-    .from("video_clips")
-    .select("id, position")
-    .eq("video_id", videoId)
-    .order("position", { ascending: true });
-  if (!clips) return;
-  await Promise.all(
-    clips
-      .filter((c, i) => c.position !== i)
-      .map((c) =>
-        supabase
-          .from("video_clips")
-          .update({ position: clips.indexOf(c) })
-          .eq("id", c.id),
-      ),
-  );
 }
 
 /**
  * Turn an approved/reviewed carousel into a video draft: one clip per slide
  * (same image, headline, and body copy), carrying over the carousel's
  * soundtrack. Opens the editor so pacing and captions can be adjusted.
+ * Expected problems (no carousel/slides yet) return to the request page as a
+ * notice instead of throwing into the generic error screen.
  */
 export async function createVideoFromCarousel(
   requestId: string,
   projectId: string,
 ) {
-  const ctx = await getProfile();
-  if (!ctx) redirect("/login");
+  const ctx = await requireProfile();
+  const backWithNotice = (message: string) =>
+    redirect(
+      `/projects/${projectId}/requests/${requestId}?notice=${encodeURIComponent(message)}`,
+    );
 
   const supabase = await createClient();
 
@@ -220,7 +250,7 @@ export async function createVideoFromCarousel(
     .order("created_at", { ascending: false })
     .limit(1)
     .maybeSingle();
-  if (!carousel) throw new Error("No carousel to turn into a video yet.");
+  if (!carousel) return backWithNotice("No carousel to turn into a video yet.");
 
   const { data: slides } = await supabase
     .from("slides")
@@ -228,7 +258,7 @@ export async function createVideoFromCarousel(
     .eq("carousel_id", carousel.id)
     .order("position", { ascending: true });
   if (!slides || slides.length === 0) {
-    throw new Error("The carousel has no slides yet.");
+    return backWithNotice("The carousel has no slides yet.");
   }
 
   const { data: video, error } = await supabase
@@ -264,8 +294,7 @@ export async function createVideoFromCarousel(
  * Runs in-request like carousel generation; the editor page sets maxDuration.
  */
 export async function renderVideoNow(videoId: string) {
-  const ctx = await getProfile();
-  if (!ctx) redirect("/login");
+  const ctx = await requireProfile();
 
   const supabase = await createClient();
   const result = await renderVideo(supabase, ctx.profile.org_id, videoId);

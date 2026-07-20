@@ -2,6 +2,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Database } from "@/lib/database.types";
 import { writeCarouselCopy, generateImage } from "@/lib/gemini";
 import { embedText } from "@/lib/embeddings";
+import { runCreatomateRender, slideElements } from "@/lib/creatomate";
 
 /**
  * In-app carousel generation — the full Workflow C pipeline (spec section 6),
@@ -264,8 +265,6 @@ async function renderAndPersistSlide(
     backgroundPath: string;
   },
 ): Promise<string> {
-  const apiKey = process.env.CREATOMATE_API_KEY!;
-
   const { data: signed, error: signError } = await supabase.storage
     .from("assets")
     .createSignedUrl(slide.backgroundPath, 3600);
@@ -273,97 +272,24 @@ async function renderAndPersistSlide(
     throw new Error(`sign background: ${signError?.message ?? "failed"}`);
   }
 
-  // Inline source (no Creatomate template needed): background photo, dark
-  // overlay for contrast, headline + body. 1080x1350 = 4:5 portrait feed size.
-  const source = {
-    output_format: "png",
-    width: 1080,
-    height: 1350,
-    elements: [
-      {
-        type: "image",
-        source: signed.signedUrl,
-        x: "50%",
-        y: "50%",
-        width: "100%",
-        height: "100%",
-        fit: "cover",
-        color_overlay: "rgba(0,0,0,0.45)",
-      },
-      {
-        type: "text",
-        text: slide.headline ?? "",
-        x: "50%",
-        y: "42%",
-        width: "84%",
-        x_alignment: "50%",
-        y_alignment: "100%",
-        font_family: "Inter",
-        font_weight: "700",
-        font_size: "72 px",
-        fill_color: "#ffffff",
-      },
-      {
-        type: "text",
-        text: slide.bodyCopy ?? "",
-        x: "50%",
-        y: "48%",
-        width: "78%",
-        x_alignment: "50%",
-        y_alignment: "0%",
-        font_family: "Inter",
-        font_weight: "400",
-        font_size: "38 px",
-        fill_color: "#f4f4f5",
-      },
-    ],
-  };
-
-  // Submit.
-  const submitRes = await fetch("https://api.creatomate.com/v1/renders", {
-    method: "POST",
-    headers: {
-      Authorization: `Bearer ${apiKey}`,
-      "Content-Type": "application/json",
+  // Inline source (no Creatomate template needed) using the shared slide
+  // composition (src/lib/creatomate.ts), so still slides, video clips, and
+  // the in-app preview all render the same layout. 1080x1350 = 4:5 portrait.
+  // Stills finish in seconds — 90s poll cap is generous.
+  const bytes = await runCreatomateRender(
+    {
+      output_format: "png",
+      width: 1080,
+      height: 1350,
+      elements: slideElements({
+        imageUrl: signed.signedUrl,
+        headline: slide.headline,
+        bodyCopy: slide.bodyCopy,
+      }),
     },
-    body: JSON.stringify({ source }),
-  });
-  if (!submitRes.ok) {
-    throw new Error(
-      `Creatomate submit failed (${submitRes.status}): ${(await submitRes.text()).slice(0, 300)}`,
-    );
-  }
-  const renders = (await submitRes.json()) as Array<{
-    id: string;
-    status: string;
-    url?: string;
-  }>;
-  let render = renders[0];
-  if (!render) throw new Error("Creatomate returned no render job");
+    90_000,
+  );
 
-  // Poll until finished (~2s interval, 90s cap per slide).
-  const deadline = Date.now() + 90_000;
-  while (render.status !== "succeeded") {
-    if (render.status === "failed") throw new Error("Creatomate render failed");
-    if (Date.now() > deadline) throw new Error("Creatomate render timed out");
-    await new Promise((r) => setTimeout(r, 2000));
-    const pollRes = await fetch(
-      `https://api.creatomate.com/v1/renders/${render.id}`,
-      { headers: { Authorization: `Bearer ${apiKey}` } },
-    );
-    if (!pollRes.ok) {
-      throw new Error(`Creatomate poll failed (${pollRes.status})`);
-    }
-    render = (await pollRes.json()) as typeof render;
-  }
-  if (!render.url) throw new Error("Creatomate finished without an output URL");
-
-  // Fetch the finished image and persist it in the private renders bucket.
-  const fileRes = await fetch(render.url);
-  if (!fileRes.ok) {
-    throw new Error(`fetching render output failed (${fileRes.status})`);
-  }
-  const bytes = new Uint8Array(await fileRes.arrayBuffer());
   const renderPath = `${slide.orgId}/${slide.carouselId}/slide-${slide.position + 1}.png`;
   const { error: uploadError } = await supabase.storage
     .from("renders")

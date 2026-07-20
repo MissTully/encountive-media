@@ -21,9 +21,12 @@ export async function deleteAudioAsset(formData: FormData) {
     .single();
   if (!row) return;
 
-  await supabase.storage.from("audio").remove([row.storage_path]);
+  // Delete the row first — it's the authoritative record. A failed storage
+  // cleanup leaves only an orphaned object; the reverse order could leave a
+  // listed track whose file is gone (broken players and renders).
   const { error } = await supabase.from("audio_assets").delete().eq("id", id);
   if (error) throw new Error(error.message);
+  await supabase.storage.from("audio").remove([row.storage_path]);
 
   revalidatePath("/music");
 }

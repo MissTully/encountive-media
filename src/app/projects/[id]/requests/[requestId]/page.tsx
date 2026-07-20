@@ -10,6 +10,8 @@ import {
   setCarouselAudio,
 } from "../../../actions";
 import { createVideoFromCarousel } from "../../../../videos/actions";
+import { trackLabel } from "@/lib/format";
+import { firstParam } from "@/lib/search";
 import { VideoPreview, type PreviewSlide } from "@/components/video-preview";
 
 export const dynamic = "force-dynamic";
@@ -38,10 +40,10 @@ export default async function RequestDetailPage({
   searchParams,
 }: {
   params: Promise<{ id: string; requestId: string }>;
-  searchParams: Promise<{ notice?: string }>;
+  searchParams: Promise<{ notice?: string | string[] }>;
 }) {
   const { id, requestId } = await params;
-  const notice = ((await searchParams).notice ?? "").trim();
+  const notice = firstParam((await searchParams).notice).trim();
   const ctx = await getProfile();
   if (!ctx) redirect("/login");
 
@@ -106,35 +108,25 @@ export default async function RequestDetailPage({
     );
   }
 
-  // Music library tracks for the soundtrack picker, plus a signed URL for the
+  // Music library tracks for the soundtrack picker (storage_path included so
+  // the selected track needs no second query), plus a signed URL for the
   // currently selected track so the video preview can play it.
   const { data: trackRows } = await supabase
     .from("audio_assets")
-    .select("id, title, artist")
+    .select("id, title, artist, storage_path")
     .eq("status", "ready")
     .order("created_at", { ascending: false });
   const tracks = trackRows ?? [];
 
   let audioUrl: string | null = null;
   let audioLabel: string | null = null;
-  if (carousel?.audio_asset_id) {
-    const track = tracks.find((t) => t.id === carousel.audio_asset_id);
-    if (track) {
-      audioLabel = [track.title ?? "Untitled", track.artist]
-        .filter(Boolean)
-        .join(" — ");
-    }
-    const { data: audioRow } = await supabase
-      .from("audio_assets")
-      .select("storage_path")
-      .eq("id", carousel.audio_asset_id)
-      .single();
-    if (audioRow) {
-      const { data } = await supabase.storage
-        .from("audio")
-        .createSignedUrl(audioRow.storage_path, 3600);
-      audioUrl = data?.signedUrl ?? null;
-    }
+  const selectedTrack = tracks.find((t) => t.id === carousel?.audio_asset_id);
+  if (selectedTrack) {
+    audioLabel = trackLabel(selectedTrack.title, selectedTrack.artist);
+    const { data } = await supabase.storage
+      .from("audio")
+      .createSignedUrl(selectedTrack.storage_path, 3600);
+    audioUrl = data?.signedUrl ?? null;
   }
 
   const previewSlides: PreviewSlide[] = slides.map((s) => ({
@@ -291,7 +283,7 @@ export default async function RequestDetailPage({
                 <option value="">None (silent)</option>
                 {tracks.map((t) => (
                   <option key={t.id} value={t.id}>
-                    {[t.title ?? "Untitled", t.artist].filter(Boolean).join(" — ")}
+                    {trackLabel(t.title, t.artist)}
                   </option>
                 ))}
               </select>

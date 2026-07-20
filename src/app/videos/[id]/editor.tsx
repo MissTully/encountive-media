@@ -11,10 +11,10 @@ import {
   updateClip,
   updateVideoSettings,
 } from "../actions";
+import { VIDEO_STATUS_STYLES } from "../status";
 
 export interface EditorClip {
   id: string;
-  position: number;
   headline: string | null;
   bodyCopy: string | null;
   durationSeconds: number;
@@ -26,13 +26,6 @@ interface PickerAsset {
   title: string | null;
   url: string | null;
 }
-
-const STATUS_STYLES: Record<string, string> = {
-  draft: "bg-zinc-200 text-zinc-700 dark:bg-zinc-800 dark:text-zinc-300",
-  rendering: "bg-blue-100 text-blue-700 dark:bg-blue-950 dark:text-blue-300",
-  ready: "bg-green-100 text-green-700 dark:bg-green-950 dark:text-green-300",
-  error: "bg-red-100 text-red-700 dark:bg-red-950 dark:text-red-300",
-};
 
 /**
  * The video editor: a clip timeline (add / reorder / caption / time images
@@ -130,7 +123,7 @@ export function Editor({
             />
             <span
               className={`shrink-0 rounded-full px-2.5 py-1 text-xs font-medium ${
-                STATUS_STYLES[video.status] ?? STATUS_STYLES.draft
+                VIDEO_STATUS_STYLES[video.status] ?? VIDEO_STATUS_STYLES.draft
               }`}
             >
               {video.status}
@@ -414,18 +407,17 @@ export function Editor({
               />
             )}
             <div className="flex flex-wrap items-center gap-2">
+              {/* Stays clickable while status is "rendering": if a previous
+                  render's function died mid-run the row would say rendering
+                  forever, and this is the recovery path. */}
               <form action={renderVideoNow.bind(null, video.id)}>
                 <button
                   type="submit"
-                  disabled={
-                    clips.length === 0 ||
-                    !creatomateReady ||
-                    video.status === "rendering"
-                  }
+                  disabled={clips.length === 0 || !creatomateReady}
                   className="rounded-full bg-zinc-900 px-4 py-2 text-sm font-medium text-white hover:bg-zinc-700 disabled:cursor-not-allowed disabled:opacity-50 dark:bg-zinc-100 dark:text-zinc-900 dark:hover:bg-zinc-300"
                 >
                   {video.status === "rendering"
-                    ? "Rendering…"
+                    ? "Retry render"
                     : outputUrl
                       ? "Re-render MP4"
                       : "Render MP4"}

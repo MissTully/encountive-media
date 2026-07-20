@@ -2,6 +2,8 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { getProfile } from "@/lib/auth";
 import { createClient } from "@/lib/supabase/server";
+import { formatDuration } from "@/lib/format";
+import { firstParam, sanitizeSearch } from "@/lib/search";
 import { deleteAudioAsset, updateAudioAsset } from "./actions";
 
 // Always render fresh so new uploads and searches reflect live data.
@@ -18,50 +20,41 @@ interface TrackCard {
   url: string | null;
 }
 
-// Strip characters that would break PostgREST's `or` filter syntax.
-function sanitize(q: string): string {
-  return q.replace(/[,()*\\%]/g, " ").trim();
-}
-
-function formatDuration(seconds: number | null): string | null {
-  if (seconds === null || !Number.isFinite(seconds)) return null;
-  const total = Math.round(seconds);
-  const m = Math.floor(total / 60);
-  const s = total % 60;
-  return `${m}:${String(s).padStart(2, "0")}`;
-}
-
 export default async function MusicLibraryPage({
   searchParams,
 }: {
-  searchParams: Promise<{ q?: string }>;
+  searchParams: Promise<{ q?: string | string[] }>;
 }) {
   const ctx = await getProfile();
   if (!ctx) redirect("/login");
 
-  const query = ((await searchParams).q ?? "").trim();
+  const query = firstParam((await searchParams).q).trim();
   const supabase = await createClient();
 
   // Keyword search (or no query → everything), newest first.
   let q = supabase
     .from("audio_assets")
     .select("id, storage_path, title, artist, tags, duration_seconds, created_at")
-    .order("created_at", { ascending: false });
+    .order("created_at", { ascending: false })
+    .limit(200);
   if (query) {
-    const safe = sanitize(query);
+    const safe = sanitizeSearch(query);
     q = q.or(`title.ilike.%${safe}%,artist.ilike.%${safe}%`);
   }
   const { data: rows } = await q;
 
-  // Private bucket → short-lived signed URLs for the inline players.
-  const tracks: TrackCard[] = await Promise.all(
-    (rows ?? []).map(async (r) => {
-      const { data } = await supabase.storage
+  // Private bucket → short-lived signed URLs for the inline players, all
+  // signed in a single storage round trip.
+  const { data: signed } = rows?.length
+    ? await supabase.storage
         .from("audio")
-        .createSignedUrl(r.storage_path, 3600);
-      return { ...r, tags: r.tags ?? [], url: data?.signedUrl ?? null };
-    }),
-  );
+        .createSignedUrls(rows.map((r) => r.storage_path), 3600)
+    : { data: [] };
+  const tracks: TrackCard[] = (rows ?? []).map((r, i) => ({
+    ...r,
+    tags: r.tags ?? [],
+    url: signed?.[i]?.signedUrl ?? null,
+  }));
 
   return (
     <div className="flex flex-1 flex-col items-center bg-zinc-50 font-sans dark:bg-black">

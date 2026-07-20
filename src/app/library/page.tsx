@@ -3,6 +3,7 @@ import { redirect } from "next/navigation";
 import { getProfile } from "@/lib/auth";
 import { createClient } from "@/lib/supabase/server";
 import { embedText, hasGeminiKey } from "@/lib/embeddings";
+import { firstParam, sanitizeSearch } from "@/lib/search";
 import { analyzePendingAssets, resetStuckAssets } from "./actions";
 
 // Always render fresh so newly-processed images and searches reflect live data.
@@ -28,24 +29,23 @@ interface AssetCard {
   url: string | null;
 }
 
-// Strip characters that would break PostgREST's `or` filter syntax.
-function sanitize(q: string): string {
-  return q.replace(/[,()*\\%]/g, " ").trim();
-}
-
 export default async function LibraryPage({
   searchParams,
 }: {
-  searchParams: Promise<{ q?: string; mode?: string; notice?: string }>;
+  searchParams: Promise<{
+    q?: string | string[];
+    mode?: string | string[];
+    notice?: string | string[];
+  }>;
 }) {
   const ctx = await getProfile();
   if (!ctx) redirect("/login");
   const orgId = ctx.profile.org_id;
 
   const sp = await searchParams;
-  const query = (sp.q ?? "").trim();
-  const mode = sp.mode === "semantic" ? "semantic" : "keyword";
-  const notice = (sp.notice ?? "").trim();
+  const query = firstParam(sp.q).trim();
+  const mode = firstParam(sp.mode) === "semantic" ? "semantic" : "keyword";
+  const notice = firstParam(sp.notice).trim();
   const geminiReady = hasGeminiKey();
 
   const supabase = await createClient();
@@ -104,7 +104,7 @@ export default async function LibraryPage({
       .select("id, storage_path, title, description, tags, status")
       .order("created_at", { ascending: false });
     if (query) {
-      const safe = sanitize(query);
+      const safe = sanitizeSearch(query);
       q = q.or(`title.ilike.%${safe}%,description.ilike.%${safe}%`);
     }
     const { data } = await q;

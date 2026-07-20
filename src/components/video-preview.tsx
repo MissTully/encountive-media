@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { formatClock } from "@/lib/format";
 
 export interface PreviewSlide {
   id: string;
@@ -10,13 +11,8 @@ export interface PreviewSlide {
   imageUrl: string | null;
   /** True when imageUrl is a finished render (text already baked in). */
   isRendered: boolean;
-  /** How long this slide holds on screen. */
+  /** How long this slide holds on screen (clamped to at least 0.1s). */
   durationSeconds: number;
-}
-
-function formatClock(seconds: number): string {
-  const total = Math.max(0, Math.floor(seconds));
-  return `${Math.floor(total / 60)}:${String(total % 60).padStart(2, "0")}`;
 }
 
 /**
@@ -53,16 +49,21 @@ export function VideoPreview({
   // format Creatomate renders: 72px headline / 38px body).
   const fontScale = canvasWidth / 1080;
 
+  // Clamp durations so a zero/invalid value can't produce NaN progress math.
+  const durations = slides.map((s) =>
+    Number.isFinite(s.durationSeconds) ? Math.max(s.durationSeconds, 0.1) : 0.1,
+  );
+
   // Cumulative start time of each slide, so durations can vary per slide.
   const starts: number[] = [];
   let totalSeconds = 0;
-  for (const s of slides) {
+  for (const d of durations) {
     starts.push(totalSeconds);
-    totalSeconds += s.durationSeconds;
+    totalSeconds += d;
   }
   let current = slides.length - 1;
   for (let i = 0; i < slides.length; i++) {
-    if (elapsed < starts[i] + slides[i].durationSeconds) {
+    if (elapsed < starts[i] + durations[i]) {
       current = i;
       break;
     }
@@ -81,6 +82,9 @@ export function VideoPreview({
   }, [canvasWidth]);
 
   // Drive the timeline while playing; stop at the end of the last slide.
+  // startedAtRef is the single anchor for elapsed time — the controls below
+  // re-anchor it directly (a state-only reset would be overwritten by the
+  // next animation frame when playback is already running).
   useEffect(() => {
     if (!playing) return;
     startedAtRef.current = performance.now() - elapsed * 1000;
@@ -100,25 +104,29 @@ export function VideoPreview({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [playing, totalSeconds]);
 
-  // Keep the soundtrack in lockstep with the timeline.
+  // Play/pause the soundtrack with the timeline. A paused <audio> keeps its
+  // position, so resume needs no seeking — the controls seek explicitly when
+  // they rewind the timeline.
   useEffect(() => {
     const audio = audioRef.current;
     if (!audio) return;
-    if (playing) {
-      audio.currentTime = elapsed % Math.max(audio.duration || totalSeconds, 1);
-      void audio.play().catch(() => {});
-    } else {
-      audio.pause();
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    if (playing) void audio.play().catch(() => {});
+    else audio.pause();
   }, [playing]);
 
   function toggle() {
-    if (!playing && elapsed >= totalSeconds) setElapsed(0);
+    if (!playing && elapsed >= totalSeconds) {
+      // Replay from the end: rewind both clocks before starting.
+      setElapsed(0);
+      if (audioRef.current) audioRef.current.currentTime = 0;
+    }
     setPlaying((p) => !p);
   }
 
   function restart() {
+    // Re-anchor the running rAF loop directly — if playback is mid-flight,
+    // `playing` doesn't change, so the effect above won't re-run.
+    startedAtRef.current = performance.now();
     setElapsed(0);
     const audio = audioRef.current;
     if (audio) audio.currentTime = 0;
@@ -195,14 +203,14 @@ export function VideoPreview({
         <div className="absolute left-2 right-2 top-2 flex gap-1">
           {slides.map((s, i) => {
             const fill = Math.min(
-              Math.max((elapsed - starts[i]) / s.durationSeconds, 0),
+              Math.max((elapsed - starts[i]) / durations[i], 0),
               1,
             );
             return (
               <div
                 key={s.id}
                 className="h-1 overflow-hidden rounded-full bg-white/30"
-                style={{ flexGrow: s.durationSeconds }}
+                style={{ flexGrow: durations[i], flexBasis: 0 }}
               >
                 <div
                   className="h-full bg-white"
