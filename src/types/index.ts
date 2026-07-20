@@ -159,6 +159,41 @@ export interface VideoClip {
   created_at: string;
 }
 
+/** Platforms the publishing layer can post to directly. */
+export type SocialPlatform = "instagram" | "facebook" | "linkedin";
+
+/** A connected publishing destination (IG business account, FB Page, LinkedIn org). */
+export interface SocialAccount {
+  id: UUID;
+  org_id: UUID;
+  platform: SocialPlatform;
+  display_name: string; // display label, e.g. "Encountive on Instagram"
+  external_id: string; // IG user id / FB Page id / LinkedIn author URN
+  access_token: string; // long-lived platform token
+  refresh_token: string | null;
+  token_expires_at: string | null;
+  metadata: Record<string, unknown>; // jsonb
+  connected_by: UUID | null; // profile that connected it
+  created_at: string;
+}
+
+/** Lifecycle of one publish attempt. */
+export type PublicationStatus = "publishing" | "published" | "failed";
+
+/** One attempt to post an approved carousel to one social account. */
+export interface Publication {
+  id: UUID;
+  request_id: UUID;
+  social_account_id: UUID;
+  caption: string;
+  status: PublicationStatus;
+  post_ref: string | null; // platform post/media id
+  post_url: string | null; // permalink when the platform provides one
+  error: string | null;
+  published_at: string | null;
+  created_at: string;
+}
+
 export interface Slide {
   id: UUID;
   carousel_id: UUID;
