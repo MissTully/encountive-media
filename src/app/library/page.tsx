@@ -4,7 +4,12 @@ import { getProfile } from "@/lib/auth";
 import { createClient } from "@/lib/supabase/server";
 import { embedText, hasGeminiKey } from "@/lib/embeddings";
 import { firstParam, sanitizeSearch } from "@/lib/search";
-import { analyzePendingAssets, resetStuckAssets } from "./actions";
+import {
+  analyzePendingAssets,
+  resetStuckAssets,
+  renameAsset,
+  deleteAsset,
+} from "./actions";
 
 // Always render fresh so newly-processed images and searches reflect live data.
 export const dynamic = "force-dynamic";
@@ -27,6 +32,19 @@ interface AssetCard {
   status: string | null;
   similarity: number | null;
   url: string | null;
+  downloadUrl: string | null;
+}
+
+/** Filesystem-safe download name: the asset title + its stored extension. */
+function downloadFilename(title: string | null, storagePath: string): string {
+  const ext = storagePath.match(/\.[a-z0-9]+$/i)?.[0] ?? "";
+  const base =
+    (title ?? "")
+      .replace(/[^\p{L}\p{N} _-]+/gu, "")
+      .trim()
+      .replace(/\s+/g, "-")
+      .slice(0, 60) || "image";
+  return `${base}${ext}`;
 }
 
 export default async function LibraryPage({
@@ -64,7 +82,7 @@ export default async function LibraryPage({
       .eq("status", "analyzing"),
   ]);
 
-  let rows: Omit<AssetCard, "url">[] = [];
+  let rows: Omit<AssetCard, "url" | "downloadUrl">[] = [];
   let searchError: string | null = null;
 
   if (query && mode === "semantic") {
@@ -119,13 +137,21 @@ export default async function LibraryPage({
     }));
   }
 
-  // Private buckets → short-lived signed URLs for thumbnails.
+  // Private buckets → short-lived signed URLs: one to view the thumbnail, one
+  // with a Content-Disposition filename so "Download" saves the original file.
   const items: AssetCard[] = await Promise.all(
     rows.map(async (r) => {
-      const { data } = await supabase.storage
-        .from("assets")
-        .createSignedUrl(r.storage_path, 3600);
-      return { ...r, url: data?.signedUrl ?? null };
+      const [{ data: view }, { data: dl }] = await Promise.all([
+        supabase.storage.from("assets").createSignedUrl(r.storage_path, 3600),
+        supabase.storage.from("assets").createSignedUrl(r.storage_path, 3600, {
+          download: downloadFilename(r.title, r.storage_path),
+        }),
+      ]);
+      return {
+        ...r,
+        url: view?.signedUrl ?? null,
+        downloadUrl: dl?.signedUrl ?? null,
+      };
     }),
   );
 
@@ -293,11 +319,29 @@ export default async function LibraryPage({
                     </span>
                   )}
                 </div>
-                <div className="flex flex-col gap-1 px-2.5 py-2">
-                  <div className="flex items-center justify-between gap-2">
-                    <span className="truncate text-xs font-medium text-zinc-800 dark:text-zinc-200">
-                      {a.title ?? "Untitled"}
-                    </span>
+                <div className="flex flex-col gap-1.5 px-2.5 py-2">
+                  <div className="flex items-center gap-2">
+                    {/* Inline rename: edit the title in place, ✓ to save. */}
+                    <form
+                      action={renameAsset.bind(null, a.id)}
+                      className="flex min-w-0 flex-1 items-center gap-1"
+                    >
+                      <input
+                        type="text"
+                        name="title"
+                        required
+                        defaultValue={a.title ?? ""}
+                        placeholder="Untitled"
+                        className="w-full min-w-0 rounded border border-transparent bg-transparent px-1 py-0.5 text-xs font-medium text-zinc-800 outline-none hover:border-zinc-200 focus:border-zinc-400 focus:bg-white dark:text-zinc-200 dark:hover:border-zinc-800 dark:focus:border-zinc-600 dark:focus:bg-zinc-950"
+                      />
+                      <button
+                        type="submit"
+                        title="Save name"
+                        className="shrink-0 rounded px-1 text-xs text-zinc-400 hover:text-zinc-800 dark:hover:text-zinc-200"
+                      >
+                        ✓
+                      </button>
+                    </form>
                     {a.status && (
                       <span
                         className={`shrink-0 rounded-full px-2 py-0.5 text-[10px] font-medium ${
@@ -313,6 +357,27 @@ export default async function LibraryPage({
                       {a.tags.slice(0, 4).join(" · ")}
                     </span>
                   )}
+                  <div className="flex items-center justify-between border-t border-zinc-100 pt-1.5 dark:border-zinc-900">
+                    {a.downloadUrl ? (
+                      <a
+                        href={a.downloadUrl}
+                        className="text-[11px] font-medium text-zinc-500 underline hover:text-zinc-800 dark:hover:text-zinc-300"
+                      >
+                        ⬇ Download
+                      </a>
+                    ) : (
+                      <span />
+                    )}
+                    <form action={deleteAsset.bind(null, a.id)}>
+                      <button
+                        type="submit"
+                        title="Delete from library (removes it from project boards too)"
+                        className="text-[11px] font-medium text-zinc-400 hover:text-red-600 dark:hover:text-red-400"
+                      >
+                        Delete
+                      </button>
+                    </form>
+                  </div>
                 </div>
               </li>
             ))}
