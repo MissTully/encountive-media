@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { getProfile } from "@/lib/auth";
+import { generateCarousel } from "@/lib/carousel";
 
 /** Create a project in the current user's org, then open its board. */
 export async function createProject(formData: FormData) {
@@ -75,6 +76,27 @@ export async function createContentRequest(
   if (error) throw new Error(error.message);
 
   revalidatePath(`/projects/${projectId}`);
+}
+
+/**
+ * Generate a carousel right now, in-app, instead of waiting for the n8n
+ * Workflow C poller — see src/lib/carousel.ts. Also the recovery path for
+ * requests a crashed n8n run left stranded at `generating`.
+ */
+export async function generateCarouselNow(
+  requestId: string,
+  projectId: string,
+) {
+  const ctx = await getProfile();
+  if (!ctx) redirect("/login");
+
+  const supabase = await createClient();
+  const result = await generateCarousel(supabase, ctx.profile.org_id, requestId);
+
+  revalidatePath(`/projects/${projectId}/requests/${requestId}`);
+  redirect(
+    `/projects/${projectId}/requests/${requestId}?notice=${encodeURIComponent(result.message)}`,
+  );
 }
 
 /** Approve a carousel that's in review (human approval before publishing). */

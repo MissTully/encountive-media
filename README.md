@@ -78,10 +78,20 @@ docs/                  # build specification
 1. ✅ Scaffold app + Supabase client setup
 2. ✅ Database schema — tables, pgvector, RLS, `match_assets`
 3. ✅ Bulk image upload + auth (Google OAuth)
-4. ✅ Vision auto-titling + embeddings ([n8n Workflow A](docs/n8n-workflow-a.md))
+4. ✅ Vision auto-titling + embeddings ([n8n Workflow A](docs/n8n-workflow-a.md) + in-app fallback)
 5. ✅ Asset library with keyword + semantic search
 6. ✅ Projects & boards (Workflow B)
-7. ✅ Carousel generation — copy + reuse (board→library) + Creatomate render ([Workflow C](docs/n8n-workflow-c.md)); image-gen fallback + render persistence are optional follow-ups
+7. ✅ Carousel generation — copy + reuse (board→library) + image-gen fallback + Creatomate render persisted to the `renders` bucket ([Workflow C](docs/n8n-workflow-c.md) + in-app **Generate now**)
 8. ✅ Review / approval screen
 
-Build and test one phase before moving to the next.
+All phases are built. See [`docs/test-report-2026-07-19.md`](docs/test-report-2026-07-19.md)
+for the full end-to-end test pass and the n8n outage diagnosis.
+
+## Generation runs in two places
+
+The n8n workflows poll on a schedule; the app can also run the same pipelines
+directly (library → **Analyze next batch**, request page → **Generate now**).
+The in-app versions claim rows by status (`uploaded → analyzing`,
+`queued → generating`) so the two never double-process, and they recover work
+a crashed n8n run left stranded. In-app generation needs `GOOGLE_GEMINI_API_KEY`
+(and optionally `CREATOMATE_API_KEY`) — see `.env.example`.

@@ -369,6 +369,19 @@ export type Database = {
     }
     Functions: {
       current_org_id: { Args: Record<PropertyKey, never>; Returns: string }
+      pick_slide_asset: {
+        Args: {
+          match_threshold: number
+          p_project_id: string
+          query_embedding: string
+        }
+        Returns: {
+          asset_id: string | null
+          from_board: boolean
+          similarity: number | null
+          storage_path: string | null
+        }[]
+      }
       match_assets: {
         Args: {
           match_count: number

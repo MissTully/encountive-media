@@ -73,11 +73,26 @@ Schedule Trigger (every 2 min)
 4. To re-test the same row: `update public.assets set status='uploaded',
    title=null, description=null, tags='{}', embedding=null where id='…';`
 
+## In-app fallback (added 2026-07-19)
+
+The library page now has an **Analyze next batch** button that runs this same
+pipeline inside the app (`src/app/library/actions.ts` → `src/lib/gemini.ts`),
+using the app's `GOOGLE_GEMINI_API_KEY`. Unlike this n8n flow it reverts an
+asset to `uploaded` when a step fails, so nothing is stranded. A **Reset stuck**
+button flips `analyzing` rows back to `uploaded`.
+
+Context: on 2026-07-19 a bulk upload of ~244 images stalled — this workflow's
+Gemini calls began failing (quota/credential), and each 2-minute run stranded
+one more asset at `analyzing` (Supabase API logs show fetch → mark analyzing →
+download → then silence, all Supabase calls 200). Check the n8n execution log
+and the Gemini key/quota in the `googlePalmApi` credential.
+
 ## Limitations / future hardening
 
 - **Stuck `analyzing`:** if a row errors after Mark Analyzing, it stays
   `analyzing` and won't retry. Add a sweep that resets rows stuck in `analyzing`
-  for > N minutes back to `uploaded`, or add an error branch.
+  for > N minutes back to `uploaded`, or add an error branch. (The in-app
+  **Reset stuck** button is the manual version of this sweep.)
 - **Polling vs. realtime:** a 2-minute poll is simple and self-contained. For
   near-realtime, replace the Schedule trigger with a Supabase Database Webhook
   on insert into `assets`.

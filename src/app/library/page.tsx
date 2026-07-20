@@ -3,9 +3,13 @@ import { redirect } from "next/navigation";
 import { getProfile } from "@/lib/auth";
 import { createClient } from "@/lib/supabase/server";
 import { embedText, hasGeminiKey } from "@/lib/embeddings";
+import { analyzePendingAssets, resetStuckAssets } from "./actions";
 
 // Always render fresh so newly-processed images and searches reflect live data.
 export const dynamic = "force-dynamic";
+// Analyzing a batch of images (vision + embedding per image) takes longer than
+// the default serverless window.
+export const maxDuration = 60;
 
 const STATUS_STYLES: Record<string, string> = {
   uploaded: "bg-zinc-200 text-zinc-700 dark:bg-zinc-800 dark:text-zinc-300",
@@ -32,7 +36,7 @@ function sanitize(q: string): string {
 export default async function LibraryPage({
   searchParams,
 }: {
-  searchParams: Promise<{ q?: string; mode?: string }>;
+  searchParams: Promise<{ q?: string; mode?: string; notice?: string }>;
 }) {
   const ctx = await getProfile();
   if (!ctx) redirect("/login");
@@ -41,9 +45,24 @@ export default async function LibraryPage({
   const sp = await searchParams;
   const query = (sp.q ?? "").trim();
   const mode = sp.mode === "semantic" ? "semantic" : "keyword";
+  const notice = (sp.notice ?? "").trim();
   const geminiReady = hasGeminiKey();
 
   const supabase = await createClient();
+
+  // Pipeline health: how many images still need vision analysis + embedding.
+  const [{ count: pendingCount }, { count: stuckCount }] = await Promise.all([
+    supabase
+      .from("assets")
+      .select("*", { count: "exact", head: true })
+      .eq("org_id", orgId)
+      .eq("status", "uploaded"),
+    supabase
+      .from("assets")
+      .select("*", { count: "exact", head: true })
+      .eq("org_id", orgId)
+      .eq("status", "analyzing"),
+  ]);
 
   let rows: Omit<AssetCard, "url">[] = [];
   let searchError: string | null = null;
@@ -182,6 +201,51 @@ export default async function LibraryPage({
             </>
           )}
         </p>
+
+        {notice && (
+          <p className="rounded-lg border border-blue-300 bg-blue-50 px-4 py-3 text-sm text-blue-900 dark:border-blue-900 dark:bg-blue-950 dark:text-blue-300">
+            {notice}
+          </p>
+        )}
+
+        {((pendingCount ?? 0) > 0 || (stuckCount ?? 0) > 0) && (
+          <div className="flex flex-col gap-3 rounded-xl border border-amber-300 bg-amber-50 px-4 py-3 sm:flex-row sm:items-center dark:border-amber-900 dark:bg-amber-950">
+            <span className="flex-1 text-sm text-amber-900 dark:text-amber-300">
+              {pendingCount ?? 0} image{(pendingCount ?? 0) === 1 ? "" : "s"}{" "}
+              waiting for analysis
+              {(stuckCount ?? 0) > 0 && (
+                <>
+                  {" · "}
+                  {stuckCount} stuck mid-analysis
+                </>
+              )}
+              . The n8n workflow processes these on a schedule, or run a batch
+              now.
+            </span>
+            <div className="flex shrink-0 gap-2">
+              {(stuckCount ?? 0) > 0 && (
+                <form action={resetStuckAssets}>
+                  <button
+                    type="submit"
+                    className="rounded-full border border-amber-400 bg-white px-4 py-1.5 text-sm font-medium text-amber-900 hover:bg-amber-100 dark:border-amber-800 dark:bg-zinc-900 dark:text-amber-300 dark:hover:bg-zinc-800"
+                  >
+                    Reset {stuckCount} stuck
+                  </button>
+                </form>
+              )}
+              {(pendingCount ?? 0) > 0 && (
+                <form action={analyzePendingAssets}>
+                  <button
+                    type="submit"
+                    className="rounded-full bg-zinc-900 px-4 py-1.5 text-sm font-medium text-white hover:bg-zinc-700 dark:bg-zinc-100 dark:text-zinc-900 dark:hover:bg-zinc-300"
+                  >
+                    Analyze next batch
+                  </button>
+                </form>
+              )}
+            </div>
+          </div>
+        )}
 
         {searchError && (
           <p className="rounded-lg border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-900 dark:border-amber-900 dark:bg-amber-950 dark:text-amber-300">
