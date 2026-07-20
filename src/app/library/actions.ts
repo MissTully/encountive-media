@@ -97,6 +97,62 @@ export async function analyzePendingAssets() {
   redirect(`/library?notice=${encodeURIComponent(message)}`);
 }
 
+/** Rename a library image (the auto-generated title is editable per spec). */
+export async function renameAsset(assetId: string, formData: FormData) {
+  const title = String(formData.get("title") ?? "").trim();
+  if (!title) return;
+
+  const ctx = await getProfile();
+  if (!ctx) redirect("/login");
+
+  const supabase = await createClient();
+  const { error } = await supabase
+    .from("assets")
+    .update({ title })
+    .eq("id", assetId);
+  if (error) throw new Error(error.message);
+
+  revalidatePath("/library");
+}
+
+/**
+ * Delete a library image everywhere it's referenced: off project boards, out
+ * of slides/clips that used it as a background (nulled, not deleted — the
+ * rendered output survives), then the row, then the storage object. References
+ * are cleared in code first so the delete works regardless of how the FKs'
+ * on-delete behavior is configured; the row goes before storage so a failed
+ * cleanup leaves only an orphaned object, never a dangling reference.
+ */
+export async function deleteAsset(assetId: string) {
+  const ctx = await getProfile();
+  if (!ctx) redirect("/login");
+
+  const supabase = await createClient();
+  const { data: asset } = await supabase
+    .from("assets")
+    .select("storage_path")
+    .eq("id", assetId)
+    .single();
+  if (!asset) return;
+
+  const cleared = await Promise.all([
+    supabase.from("project_assets").delete().eq("asset_id", assetId),
+    supabase.from("slides").update({ asset_id: null }).eq("asset_id", assetId),
+    supabase
+      .from("video_clips")
+      .update({ asset_id: null })
+      .eq("asset_id", assetId),
+  ]);
+  const clearError = cleared.find((r) => r.error)?.error;
+  if (clearError) throw new Error(clearError.message);
+
+  const { error } = await supabase.from("assets").delete().eq("id", assetId);
+  if (error) throw new Error(error.message);
+  await supabase.storage.from("assets").remove([asset.storage_path]);
+
+  revalidatePath("/library");
+}
+
 /**
  * Recovery for assets stranded at `analyzing` by a crashed workflow run (the
  * n8n flow marks an asset `analyzing`, then dies on the Gemini call and never

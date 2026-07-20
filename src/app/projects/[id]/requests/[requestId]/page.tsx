@@ -8,6 +8,9 @@ import {
   reopenRequest,
   generateCarouselNow,
   setCarouselAudio,
+  addSlideComment,
+  setSlideCommentResolved,
+  duplicateRequest,
 } from "../../../actions";
 import { createVideoFromCarousel } from "../../../../videos/actions";
 import { trackLabel } from "@/lib/format";
@@ -26,6 +29,14 @@ const STATUS_STYLES: Record<string, string> = {
   approved: "bg-green-100 text-green-700 dark:bg-green-950 dark:text-green-300",
 };
 
+interface SlideComment {
+  id: string;
+  body: string;
+  resolved: boolean;
+  created_at: string;
+  profiles: { full_name: string | null } | null;
+}
+
 interface SlideRow {
   id: string;
   position: number;
@@ -33,7 +44,24 @@ interface SlideRow {
   body_copy: string | null;
   render_path: string | null;
   assets: { storage_path: string } | null;
+  slide_comments: SlideComment[];
 }
+
+// Aspect-ratio presets for "Turn into video" — keys match the FORMATS map in
+// src/app/videos/actions.ts. Defaulted per platform so the video starts in the
+// shape that platform favors; changeable before creating.
+const VIDEO_FORMATS = [
+  { value: "reel", label: "9:16 — Reels / Stories / TikTok" },
+  { value: "portrait", label: "4:5 — Portrait feed" },
+  { value: "square", label: "1:1 — Square feed" },
+  { value: "landscape", label: "16:9 — Landscape / X" },
+];
+const PLATFORM_DEFAULT_FORMAT: Record<string, string> = {
+  instagram: "reel",
+  linkedin: "square",
+  facebook: "square",
+  twitter: "landscape",
+};
 
 export default async function RequestDetailPage({
   params,
@@ -74,7 +102,9 @@ export default async function RequestDetailPage({
   if (carousel) {
     const { data: slideRows } = await supabase
       .from("slides")
-      .select("id, position, headline, body_copy, render_path, assets(storage_path)")
+      .select(
+        "id, position, headline, body_copy, render_path, assets(storage_path), slide_comments(id, body, resolved, created_at, profiles(full_name))",
+      )
       .eq("carousel_id", carousel.id)
       .order("position", { ascending: true });
 
@@ -103,10 +133,23 @@ export default async function RequestDetailPage({
           renderUrl = view?.signedUrl ?? null;
           downloadUrl = dl?.signedUrl ?? null;
         }
-        return { ...s, bgUrl, renderUrl, downloadUrl };
+        return {
+          ...s,
+          slide_comments: [...(s.slide_comments ?? [])].sort((a, b) =>
+            a.created_at.localeCompare(b.created_at),
+          ),
+          bgUrl,
+          renderUrl,
+          downloadUrl,
+        };
       }),
     );
   }
+
+  const openCommentCount = slides.reduce(
+    (sum, s) => sum + s.slide_comments.filter((c) => !c.resolved).length,
+    0,
+  );
 
   // Music library tracks for the soundtrack picker (storage_path included so
   // the selected track needs no second query), plus a signed URL for the
@@ -159,6 +202,15 @@ export default async function RequestDetailPage({
             >
               {request.status}
             </span>
+            <form action={duplicateRequest.bind(null, requestId, id)} className="ml-auto">
+              <button
+                type="submit"
+                title="Queue a new carousel with the same topic, brief, and platform"
+                className="rounded-full border border-zinc-300 bg-white px-3 py-1.5 text-xs font-medium text-zinc-700 hover:bg-zinc-100 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-300 dark:hover:bg-zinc-800"
+              >
+                ⧉ Duplicate
+              </button>
+            </form>
           </div>
           {request.target_platform && (
             <span className="text-sm text-zinc-500">
@@ -175,7 +227,9 @@ export default async function RequestDetailPage({
         {request.status === "in_review" && slides.length > 0 && (
           <div className="flex items-center gap-3 rounded-xl border border-amber-300 bg-amber-50 px-4 py-3 dark:border-amber-900 dark:bg-amber-950">
             <span className="flex-1 text-sm text-amber-900 dark:text-amber-300">
-              Review the slides below, then approve or send back for changes.
+              {openCommentCount > 0
+                ? `${openCommentCount} open change request${openCommentCount === 1 ? "" : "s"} on individual slides — regenerating will apply them.`
+                : "Review the slides below — comment on individual slides to request targeted changes, then approve or send back."}
             </span>
             <form action={requeueRequest.bind(null, requestId, id)}>
               <button
@@ -248,10 +302,28 @@ export default async function RequestDetailPage({
                   for a few seconds over your chosen soundtrack.
                 </p>
               </div>
-              <form action={createVideoFromCarousel.bind(null, requestId, id)}>
+              <form
+                action={createVideoFromCarousel.bind(null, requestId, id)}
+                className="flex shrink-0 items-center gap-2"
+              >
+                <select
+                  name="format"
+                  title="Video aspect ratio"
+                  defaultValue={
+                    PLATFORM_DEFAULT_FORMAT[request.target_platform ?? ""] ??
+                    "portrait"
+                  }
+                  className="rounded-full border border-zinc-300 bg-white px-3 py-2 text-xs text-zinc-700 dark:border-zinc-700 dark:bg-zinc-950 dark:text-zinc-300"
+                >
+                  {VIDEO_FORMATS.map((f) => (
+                    <option key={f.value} value={f.value}>
+                      {f.label}
+                    </option>
+                  ))}
+                </select>
                 <button
                   type="submit"
-                  className="shrink-0 rounded-full bg-zinc-900 px-4 py-2 text-sm font-medium text-white hover:bg-zinc-700 dark:bg-zinc-100 dark:text-zinc-900 dark:hover:bg-zinc-300"
+                  className="rounded-full bg-zinc-900 px-4 py-2 text-sm font-medium text-white hover:bg-zinc-700 dark:bg-zinc-100 dark:text-zinc-900 dark:hover:bg-zinc-300"
                 >
                   Turn into video →
                 </button>
@@ -316,42 +388,100 @@ export default async function RequestDetailPage({
             {slides.map((s) => (
               <li
                 key={s.id}
-                className="flex gap-4 rounded-xl border border-zinc-200 bg-white p-4 dark:border-zinc-800 dark:bg-zinc-950"
+                className="flex flex-col gap-3 rounded-xl border border-zinc-200 bg-white p-4 dark:border-zinc-800 dark:bg-zinc-950"
               >
-                <div className="relative h-28 w-28 shrink-0 overflow-hidden rounded-lg bg-zinc-100 dark:bg-zinc-900">
-                  {s.renderUrl || s.bgUrl ? (
-                    // eslint-disable-next-line @next/next/no-img-element
-                    <img
-                      src={(s.renderUrl ?? s.bgUrl) as string}
-                      alt={`Slide ${s.position + 1}`}
-                      className="h-full w-full object-cover"
-                    />
-                  ) : (
-                    <div className="flex h-full items-center justify-center text-xs text-zinc-400">
-                      no image
-                    </div>
-                  )}
+                <div className="flex gap-4">
+                  <div className="relative h-28 w-28 shrink-0 overflow-hidden rounded-lg bg-zinc-100 dark:bg-zinc-900">
+                    {s.renderUrl || s.bgUrl ? (
+                      // eslint-disable-next-line @next/next/no-img-element
+                      <img
+                        src={(s.renderUrl ?? s.bgUrl) as string}
+                        alt={`Slide ${s.position + 1}`}
+                        className="h-full w-full object-cover"
+                      />
+                    ) : (
+                      <div className="flex h-full items-center justify-center text-xs text-zinc-400">
+                        no image
+                      </div>
+                    )}
+                  </div>
+                  <div className="flex min-w-0 flex-1 flex-col gap-1">
+                    <span className="text-xs uppercase tracking-widest text-zinc-400">
+                      Slide {s.position + 1}
+                    </span>
+                    <h3 className="font-medium text-zinc-900 dark:text-zinc-100">
+                      {s.headline ?? "—"}
+                    </h3>
+                    <p className="text-sm text-zinc-600 dark:text-zinc-400">
+                      {s.body_copy ?? ""}
+                    </p>
+                    {s.downloadUrl && (
+                      <a
+                        href={s.downloadUrl}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="mt-auto self-start text-xs font-medium text-zinc-500 underline hover:text-zinc-800 dark:hover:text-zinc-300"
+                      >
+                        ⬇ Download slide
+                      </a>
+                    )}
+                  </div>
                 </div>
-                <div className="flex min-w-0 flex-1 flex-col gap-1">
-                  <span className="text-xs uppercase tracking-widest text-zinc-400">
-                    Slide {s.position + 1}
-                  </span>
-                  <h3 className="font-medium text-zinc-900 dark:text-zinc-100">
-                    {s.headline ?? "—"}
-                  </h3>
-                  <p className="text-sm text-zinc-600 dark:text-zinc-400">
-                    {s.body_copy ?? ""}
-                  </p>
-                  {s.downloadUrl && (
-                    <a
-                      href={s.downloadUrl}
-                      target="_blank"
-                      rel="noreferrer"
-                      className="mt-auto self-start text-xs font-medium text-zinc-500 underline hover:text-zinc-800 dark:hover:text-zinc-300"
+
+                <div className="flex flex-col gap-2 border-t border-zinc-100 pt-3 dark:border-zinc-900">
+                  {s.slide_comments.map((c) => (
+                    <div
+                      key={c.id}
+                      className={`flex items-start gap-2 rounded-lg px-3 py-2 text-sm ${
+                        c.resolved
+                          ? "bg-zinc-50 text-zinc-400 dark:bg-zinc-900 dark:text-zinc-500"
+                          : "bg-amber-50 text-amber-900 dark:bg-amber-950 dark:text-amber-200"
+                      }`}
                     >
-                      ⬇ Download slide
-                    </a>
-                  )}
+                      <div className="min-w-0 flex-1">
+                        <span className="mr-2 text-xs font-medium">
+                          {c.profiles?.full_name ?? "Reviewer"}
+                        </span>
+                        <span className={c.resolved ? "line-through" : ""}>
+                          {c.body}
+                        </span>
+                      </div>
+                      <form
+                        action={setSlideCommentResolved.bind(
+                          null,
+                          c.id,
+                          requestId,
+                          id,
+                          !c.resolved,
+                        )}
+                      >
+                        <button
+                          type="submit"
+                          className="shrink-0 text-xs underline hover:no-underline"
+                        >
+                          {c.resolved ? "Reopen" : "Resolve"}
+                        </button>
+                      </form>
+                    </div>
+                  ))}
+                  <form
+                    action={addSlideComment.bind(null, s.id, requestId, id)}
+                    className="flex gap-2"
+                  >
+                    <input
+                      type="text"
+                      name="body"
+                      required
+                      placeholder="Request a change to this slide…"
+                      className="flex-1 rounded-full border border-zinc-200 bg-white px-3 py-1.5 text-sm text-zinc-900 outline-none focus:border-zinc-400 dark:border-zinc-800 dark:bg-zinc-950 dark:text-zinc-100"
+                    />
+                    <button
+                      type="submit"
+                      className="rounded-full border border-zinc-300 bg-white px-3 py-1.5 text-xs font-medium text-zinc-700 hover:bg-zinc-100 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-300 dark:hover:bg-zinc-800"
+                    >
+                      Comment
+                    </button>
+                  </form>
                 </div>
               </li>
             ))}

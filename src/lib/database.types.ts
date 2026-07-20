@@ -375,6 +375,48 @@ export type Database = {
           },
         ]
       }
+      slide_comments: {
+        Row: {
+          author_id: string | null
+          body: string
+          created_at: string
+          id: string
+          resolved: boolean
+          slide_id: string
+        }
+        Insert: {
+          author_id?: string | null
+          body: string
+          created_at?: string
+          id?: string
+          resolved?: boolean
+          slide_id: string
+        }
+        Update: {
+          author_id?: string | null
+          body?: string
+          created_at?: string
+          id?: string
+          resolved?: boolean
+          slide_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "slide_comments_author_id_fkey"
+            columns: ["author_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "slide_comments_slide_id_fkey"
+            columns: ["slide_id"]
+            isOneToOne: false
+            referencedRelation: "slides"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       slides: {
         Row: {
           asset_id: string | null
