@@ -5,6 +5,8 @@ import { createClient } from "@/lib/supabase/server";
 import { hasCreatomateKey } from "@/lib/creatomate";
 import { trackLabel } from "@/lib/format";
 import { firstParam } from "@/lib/search";
+import { ShareCard } from "@/components/share-card";
+import { publishVideoToSocial } from "../../social/actions";
 import { Editor, type EditorClip } from "./editor";
 
 // Always render fresh so clip edits and render status reflect live data.
@@ -31,71 +33,115 @@ export default async function VideoEditorPage({
 
   const supabase = await createClient();
 
-  // The video, its clips, the picker's library images, and the music tracks
-  // are independent — fetch them in parallel.
-  const [{ data: video }, { data: clipRows }, { data: assetRows }, { data: trackRows }] =
-    await Promise.all([
-      supabase
-        .from("videos")
-        .select(
-          "id, title, status, width, height, audio_asset_id, output_path, render_error",
-        )
-        .eq("id", id)
-        .single(),
-      supabase
-        .from("video_clips")
-        .select(
-          "id, position, headline, body_copy, duration_seconds, assets(storage_path)",
-        )
-        .eq("video_id", id)
-        .order("position", { ascending: true })
-        .order("created_at", { ascending: true }),
-      supabase
-        .from("assets")
-        .select("id, storage_path, title")
-        .eq("status", "ready")
-        .order("created_at", { ascending: false })
-        .limit(PICKER_LIMIT),
-      supabase
-        .from("audio_assets")
-        .select("id, title, artist, storage_path")
-        .eq("status", "ready")
-        .order("created_at", { ascending: false }),
-    ]);
+  // The video, its clips, both picker libraries, and the music tracks are
+  // independent — fetch them in parallel.
+  const [
+    { data: video },
+    { data: clipRows },
+    { data: assetRows },
+    { data: videoAssetRows },
+    { data: trackRows },
+  ] = await Promise.all([
+    supabase
+      .from("videos")
+      .select(
+        "id, title, status, width, height, audio_asset_id, output_path, render_error",
+      )
+      .eq("id", id)
+      .single(),
+    supabase
+      .from("video_clips")
+      .select(
+        "id, position, headline, body_copy, duration_seconds, assets(storage_path), video_assets(storage_path)",
+      )
+      .eq("video_id", id)
+      .order("position", { ascending: true })
+      .order("created_at", { ascending: true }),
+    supabase
+      .from("assets")
+      .select("id, storage_path, title")
+      .eq("status", "ready")
+      .order("created_at", { ascending: false })
+      .limit(PICKER_LIMIT),
+    supabase
+      .from("video_assets")
+      .select("id, storage_path, title, duration_seconds")
+      .eq("status", "ready")
+      .order("created_at", { ascending: false })
+      .limit(PICKER_LIMIT),
+    supabase
+      .from("audio_assets")
+      .select("id, title, artist, storage_path")
+      .eq("status", "ready")
+      .order("created_at", { ascending: false }),
+  ]);
   if (!video) notFound();
 
-  // Sign clip thumbnails + picker thumbnails in one batch per set.
-  const clipPaths = (clipRows ?? []).map(
-    (c) => (c.assets as { storage_path: string } | null)?.storage_path ?? null,
-  );
-  const [clipSigned, pickerSigned] = await Promise.all([
-    clipPaths.some(Boolean)
-      ? supabase.storage
-          .from("assets")
-          .createSignedUrls(clipPaths.filter((p): p is string => p !== null), 3600)
-      : Promise.resolve({ data: [] as Array<{ signedUrl: string }> }),
-    assetRows?.length
-      ? supabase.storage
-          .from("assets")
-          .createSignedUrls(assetRows.map((a) => a.storage_path), 3600)
-      : Promise.resolve({ data: [] as Array<{ signedUrl: string }> }),
+  const { data: connections } = await supabase
+    .from("social_connections")
+    .select("id, provider, display_name, account_scope")
+    .eq("status", "connected")
+    .order("provider", { ascending: true });
+
+  // Sign everything in one batch per bucket, then look up by path.
+  const rows = (clipRows ?? []) as Array<{
+    id: string;
+    headline: string | null;
+    body_copy: string | null;
+    duration_seconds: number;
+    assets: { storage_path: string } | null;
+    video_assets: { storage_path: string } | null;
+  }>;
+  const assetPaths = [
+    ...rows.flatMap((c) => (c.assets ? [c.assets.storage_path] : [])),
+    ...(assetRows ?? []).map((a) => a.storage_path),
+  ];
+  const clipBucketPaths = [
+    ...rows.flatMap((c) =>
+      !c.assets && c.video_assets ? [c.video_assets.storage_path] : [],
+    ),
+    ...(videoAssetRows ?? []).map((a) => a.storage_path),
+  ];
+  const [assetSigned, clipBucketSigned] = await Promise.all([
+    assetPaths.length
+      ? supabase.storage.from("assets").createSignedUrls(assetPaths, 3600)
+      : Promise.resolve({ data: [] }),
+    clipBucketPaths.length
+      ? supabase.storage.from("clips").createSignedUrls(clipBucketPaths, 3600)
+      : Promise.resolve({ data: [] }),
   ]);
+  const urlByPath = new Map<string, string>();
+  assetPaths.forEach((p, i) => {
+    const url = assetSigned.data?.[i]?.signedUrl;
+    if (url) urlByPath.set(p, url);
+  });
+  clipBucketPaths.forEach((p, i) => {
+    const url = clipBucketSigned.data?.[i]?.signedUrl;
+    if (url) urlByPath.set(p, url);
+  });
 
-  let signedIndex = 0;
-  const clips: EditorClip[] = (clipRows ?? []).map((c, i) => ({
-    id: c.id,
-    headline: c.headline,
-    bodyCopy: c.body_copy,
-    durationSeconds: Number(c.duration_seconds),
-    imageUrl: clipPaths[i]
-      ? (clipSigned.data?.[signedIndex++]?.signedUrl ?? null)
-      : null,
-  }));
+  const clips: EditorClip[] = rows.map((c) => {
+    const path = c.assets?.storage_path ?? c.video_assets?.storage_path ?? null;
+    return {
+      id: c.id,
+      headline: c.headline,
+      bodyCopy: c.body_copy,
+      durationSeconds: Number(c.duration_seconds),
+      imageUrl: path ? (urlByPath.get(path) ?? null) : null,
+      mediaType: c.assets ? ("image" as const) : ("video" as const),
+    };
+  });
 
-  const pickerAssets = (assetRows ?? []).map((a, i) => ({
+  const pickerAssets = (assetRows ?? []).map((a) => ({
     id: a.id,
     title: a.title,
-    url: pickerSigned.data?.[i]?.signedUrl ?? null,
+    url: urlByPath.get(a.storage_path) ?? null,
+  }));
+  const pickerClips = (videoAssetRows ?? []).map((a) => ({
+    id: a.id,
+    title: a.title,
+    url: urlByPath.get(a.storage_path) ?? null,
+    durationSeconds: a.duration_seconds,
   }));
 
   // Music tracks for the soundtrack picker + a signed URL for the selection.
@@ -153,12 +199,20 @@ export default async function VideoEditorPage({
           }}
           clips={clips}
           pickerAssets={pickerAssets}
+          pickerClips={pickerClips}
           tracks={tracks}
           audioUrl={audioUrl}
           outputUrl={outputUrl}
           downloadUrl={downloadUrl}
           creatomateReady={hasCreatomateKey()}
           notice={notice}
+        />
+
+        <ShareCard
+          action={publishVideoToSocial.bind(null, video.id)}
+          connections={connections ?? []}
+          ready={video.status === "ready" && Boolean(video.output_path)}
+          readyHint="Render the MP4 first — the finished file is what gets posted."
         />
       </main>
     </div>

@@ -56,11 +56,18 @@ export default async function ProjectBoardPage({
     }),
   );
 
-  const { data: requests } = await supabase
-    .from("content_requests")
-    .select("id, topic, target_platform, status, created_at")
-    .eq("project_id", id)
-    .order("created_at", { ascending: false });
+  const [{ data: requests }, { data: videos }] = await Promise.all([
+    supabase
+      .from("content_requests")
+      .select("id, topic, target_platform, status, created_at")
+      .eq("project_id", id)
+      .order("created_at", { ascending: false }),
+    supabase
+      .from("videos")
+      .select("id, title, status, width, height, created_at")
+      .eq("project_id", id)
+      .order("created_at", { ascending: false }),
+  ]);
 
   return (
     <div className="flex flex-1 flex-col items-center bg-zinc-50 font-sans dark:bg-black">
@@ -212,6 +219,43 @@ export default async function ProjectBoardPage({
             </ul>
           )}
         </section>
+
+        {videos && videos.length > 0 && (
+          <section className="flex flex-col gap-4 border-t border-zinc-200 pt-8 dark:border-zinc-800">
+            <div className="flex items-center justify-between">
+              <h2 className="text-lg font-semibold text-zinc-900 dark:text-zinc-100">
+                Videos
+              </h2>
+              <Link
+                href="/videos"
+                className="text-sm text-zinc-500 underline hover:text-zinc-800 dark:hover:text-zinc-300"
+              >
+                All videos
+              </Link>
+            </div>
+            <ul className="flex flex-col gap-2">
+              {videos.map((v) => (
+                <li key={v.id}>
+                  <Link
+                    href={`/videos/${v.id}`}
+                    className="flex items-center justify-between gap-4 rounded-lg border border-zinc-200 bg-white px-4 py-3 hover:border-zinc-300 dark:border-zinc-800 dark:bg-zinc-950 dark:hover:border-zinc-700"
+                  >
+                    <span className="truncate text-sm text-zinc-800 dark:text-zinc-200">
+                      {v.title}
+                      <span className="text-zinc-400">
+                        {" "}
+                        · {v.width}×{v.height} · open in editor
+                      </span>
+                    </span>
+                    <span className="shrink-0 rounded-full bg-zinc-100 px-2 py-0.5 text-[10px] font-medium text-zinc-600 dark:bg-zinc-900 dark:text-zinc-400">
+                      {v.status}
+                    </span>
+                  </Link>
+                </li>
+              ))}
+            </ul>
+          </section>
+        )}
       </main>
     </div>
   );

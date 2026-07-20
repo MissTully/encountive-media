@@ -19,6 +19,7 @@ interface ClipRow {
   body_copy: string | null;
   duration_seconds: number;
   assets: { storage_path: string } | null;
+  video_assets: { storage_path: string } | null;
 }
 
 export interface RenderVideoResult {
@@ -59,15 +60,17 @@ export async function renderVideo(
 
   const { data: clipRows } = await supabase
     .from("video_clips")
-    .select("id, position, headline, body_copy, duration_seconds, assets(storage_path)")
+    .select(
+      "id, position, headline, body_copy, duration_seconds, assets(storage_path), video_assets(storage_path)",
+    )
     .eq("video_id", videoId)
     .order("position", { ascending: true })
     .order("created_at", { ascending: true });
-  const clips = ((clipRows ?? []) as ClipRow[]).filter(
-    (c) => c.assets?.storage_path,
+  const clips = ((clipRows ?? []) as unknown as ClipRow[]).filter(
+    (c) => c.assets?.storage_path || c.video_assets?.storage_path,
   );
   if (clips.length === 0) {
-    return { ok: false, message: "Add at least one clip with an image first." };
+    return { ok: false, message: "Add at least one clip with media first." };
   }
 
   await supabase
@@ -113,24 +116,49 @@ async function submitAndPersist(
     0,
   );
 
-  // Sign all clip backgrounds in one storage round trip.
-  const { data: signed, error: signError } = await supabase.storage
-    .from("assets")
-    .createSignedUrls(
-      spec.clips.map((c) => c.assets!.storage_path),
-      3600,
+  // Sign clip media in one storage round trip per bucket (stills live in
+  // `assets`, video clips in `clips`).
+  const imagePaths = spec.clips
+    .filter((c) => c.assets?.storage_path)
+    .map((c) => c.assets!.storage_path);
+  const videoPaths = spec.clips
+    .filter((c) => !c.assets?.storage_path && c.video_assets?.storage_path)
+    .map((c) => c.video_assets!.storage_path);
+  const [imageSigned, videoSigned] = await Promise.all([
+    imagePaths.length
+      ? supabase.storage.from("assets").createSignedUrls(imagePaths, 3600)
+      : Promise.resolve({ data: [], error: null }),
+    videoPaths.length
+      ? supabase.storage.from("clips").createSignedUrls(videoPaths, 3600)
+      : Promise.resolve({ data: [], error: null }),
+  ]);
+  if (imageSigned.error || videoSigned.error) {
+    throw new Error(
+      `sign clip media: ${imageSigned.error?.message ?? videoSigned.error?.message}`,
     );
-  if (signError || !signed) {
-    throw new Error(`sign clip backgrounds: ${signError?.message ?? "failed"}`);
   }
+  const urlByPath = new Map<string, string>();
+  imagePaths.forEach((p, i) => {
+    const url = imageSigned.data?.[i]?.signedUrl;
+    if (url) urlByPath.set(p, url);
+  });
+  videoPaths.forEach((p, i) => {
+    const url = videoSigned.data?.[i]?.signedUrl;
+    if (url) urlByPath.set(p, url);
+  });
 
   // One composition per clip on track 1 — same-track elements play in
   // sequence, and `transition: true` fades make each cut a crossfade. Inside
   // each composition the layout is the shared slide composition, so the MP4
   // matches the still-slide renderer and the in-app preview.
-  const elements: Array<Record<string, unknown>> = spec.clips.map((clip, i) => {
-    if (!signed[i]?.signedUrl) {
-      throw new Error(`sign clip ${clip.position + 1} background: failed`);
+  const elements: Array<Record<string, unknown>> = spec.clips.map((clip) => {
+    const isImage = Boolean(clip.assets?.storage_path);
+    const path = isImage
+      ? clip.assets!.storage_path
+      : clip.video_assets!.storage_path;
+    const url = urlByPath.get(path);
+    if (!url) {
+      throw new Error(`sign clip ${clip.position + 1} media: failed`);
     }
     return {
       type: "composition",
@@ -138,10 +166,11 @@ async function submitAndPersist(
       duration: Number(clip.duration_seconds),
       animations: [{ type: "fade", duration: 0.5, transition: true }],
       elements: slideElements({
-        imageUrl: signed[i].signedUrl,
+        imageUrl: url,
         headline: clip.headline,
         bodyCopy: clip.body_copy,
         fontScale: spec.width / 1080,
+        mediaType: isImage ? "image" : "video",
       }),
     };
   });

@@ -7,12 +7,14 @@ export interface PreviewSlide {
   id: string;
   headline: string | null;
   bodyCopy: string | null;
-  /** Finished render if available, otherwise the raw background image. */
+  /** Finished render if available, otherwise the raw background media. */
   imageUrl: string | null;
   /** True when imageUrl is a finished render (text already baked in). */
   isRendered: boolean;
   /** How long this slide holds on screen (clamped to at least 0.1s). */
   durationSeconds: number;
+  /** "video" plays the file (muted — the soundtrack is separate); default image. */
+  mediaType?: "image" | "video";
 }
 
 /**
@@ -30,12 +32,15 @@ export function VideoPreview({
   audioLabel,
   canvasWidth = 1080,
   canvasHeight = 1350,
+  onProgress,
 }: {
   slides: PreviewSlide[];
   audioUrl: string | null;
   audioLabel: string | null;
   canvasWidth?: number;
   canvasHeight?: number;
+  /** Reports playback position, e.g. to drive an external timeline playhead. */
+  onProgress?: (elapsedSeconds: number) => void;
 }) {
   const [playing, setPlaying] = useState(false);
   const [elapsed, setElapsed] = useState(0);
@@ -44,6 +49,7 @@ export function VideoPreview({
   const stageRef = useRef<HTMLDivElement>(null);
   const audioRef = useRef<HTMLAudioElement>(null);
   const startedAtRef = useRef<number>(0);
+  const videoRefs = useRef<Map<string, HTMLVideoElement>>(new Map());
 
   // Caption sizes are authored relative to a 1080-wide canvas (the carousel
   // format Creatomate renders: 72px headline / 38px body).
@@ -114,6 +120,31 @@ export function VideoPreview({
     else audio.pause();
   }, [playing]);
 
+  // Video slides: play the current one from its in-slide offset; keep the
+  // rest paused at the start so they begin cleanly when their turn comes.
+  useEffect(() => {
+    slides.forEach((s, i) => {
+      if (s.mediaType !== "video") return;
+      const el = videoRefs.current.get(s.id);
+      if (!el) return;
+      if (i === current && playing) {
+        const offset = Math.max(0, elapsed - starts[i]);
+        if (Math.abs(el.currentTime - offset) > 0.75) el.currentTime = offset;
+        void el.play().catch(() => {});
+      } else {
+        el.pause();
+        if (i !== current) el.currentTime = 0;
+      }
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [current, playing]);
+
+  // Surface playback position to the parent (drives the timeline playhead).
+  useEffect(() => {
+    onProgress?.(elapsed);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [elapsed]);
+
   function toggle() {
     if (!playing && elapsed >= totalSeconds) {
       // Replay from the end: rewind both clocks before starting.
@@ -156,7 +187,19 @@ export function VideoPreview({
               className="absolute inset-0 transition-opacity duration-500"
               style={{ opacity: i === current ? 1 : 0 }}
             >
-              {s.imageUrl ? (
+              {s.imageUrl && s.mediaType === "video" ? (
+                <video
+                  ref={(el) => {
+                    if (el) videoRefs.current.set(s.id, el);
+                    else videoRefs.current.delete(s.id);
+                  }}
+                  src={s.imageUrl}
+                  muted
+                  playsInline
+                  preload="auto"
+                  className="h-full w-full object-cover"
+                />
+              ) : s.imageUrl ? (
                 // eslint-disable-next-line @next/next/no-img-element
                 <img
                   src={s.imageUrl}

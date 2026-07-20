@@ -120,3 +120,50 @@ export async function resetStuckAssets() {
     : `Reset ${data?.length ?? 0} stuck image${(data?.length ?? 0) === 1 ? "" : "s"} back to the queue.`;
   redirect(`/library?notice=${encodeURIComponent(message)}`);
 }
+
+/** Rename a library image inline from its card. */
+export async function updateAsset(formData: FormData) {
+  const id = String(formData.get("id") ?? "").trim();
+  if (!id) return;
+  const title = String(formData.get("title") ?? "").trim();
+
+  const ctx = await getProfile();
+  if (!ctx) redirect("/login");
+
+  const supabase = await createClient();
+  const { error } = await supabase
+    .from("assets")
+    .update({ title: title || null })
+    .eq("id", id);
+  if (error) throw new Error(error.message);
+
+  revalidatePath("/library");
+}
+
+/**
+ * Delete a library image. The row goes first (board rows cascade away;
+ * slides/video clips keep their copy but lose the background reference),
+ * then the storage object — a failed cleanup leaves only an orphaned file,
+ * never a listed image whose file is gone.
+ */
+export async function deleteAsset(formData: FormData) {
+  const id = String(formData.get("id") ?? "").trim();
+  if (!id) return;
+
+  const ctx = await getProfile();
+  if (!ctx) redirect("/login");
+
+  const supabase = await createClient();
+  const { data: row } = await supabase
+    .from("assets")
+    .select("storage_path")
+    .eq("id", id)
+    .single();
+  if (!row) return;
+
+  const { error } = await supabase.from("assets").delete().eq("id", id);
+  if (error) throw new Error(error.message);
+  await supabase.storage.from("assets").remove([row.storage_path]);
+
+  revalidatePath("/library");
+}

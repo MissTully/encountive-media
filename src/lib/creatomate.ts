@@ -21,18 +21,22 @@ export function slideElements(spec: {
   bodyCopy: string | null;
   /** canvasWidth / 1080 — scales the caption sizes to the output canvas. */
   fontScale?: number;
+  /** "video" renders the source as a muted video clip; default is image. */
+  mediaType?: "image" | "video";
 }): Array<Record<string, unknown>> {
   const fontScale = spec.fontScale ?? 1;
   const hasText = Boolean(spec.headline || spec.bodyCopy);
   const elements: Array<Record<string, unknown>> = [
     {
-      type: "image",
+      type: spec.mediaType === "video" ? "video" : "image",
       source: spec.imageUrl,
       x: "50%",
       y: "50%",
       width: "100%",
       height: "100%",
       fit: "cover",
+      // Clip audio is muted — the soundtrack lives on its own track.
+      ...(spec.mediaType === "video" ? { volume: "0%" } : {}),
       ...(hasText ? { color_overlay: "rgba(0,0,0,0.45)" } : {}),
     },
   ];

@@ -55,6 +55,18 @@ const PHASES = [
       "Assemble clips + music into marketing videos; preview, render to MP4, download.",
     done: true,
   },
+  {
+    title: "Video clip library & track view",
+    detail:
+      "Upload b-roll clips, mix them with images on the timeline, see the soundtrack waveform.",
+    done: true,
+  },
+  {
+    title: "Social publishing",
+    detail:
+      "Connect Facebook, Instagram, and LinkedIn (personal + company) and post carousels/videos.",
+    done: true,
+  },
 ];
 
 export default async function Home() {
@@ -132,6 +144,12 @@ export default async function Home() {
                 Music library
               </Link>
               <Link
+                href="/clips"
+                className="rounded-full border border-zinc-300 px-4 py-2 text-sm font-medium text-zinc-800 hover:bg-zinc-100 dark:border-zinc-700 dark:text-zinc-200 dark:hover:bg-zinc-800"
+              >
+                Video clips
+              </Link>
+              <Link
                 href="/videos"
                 className="rounded-full border border-zinc-300 px-4 py-2 text-sm font-medium text-zinc-800 hover:bg-zinc-100 dark:border-zinc-700 dark:text-zinc-200 dark:hover:bg-zinc-800"
               >
@@ -148,6 +166,12 @@ export default async function Home() {
                 className="rounded-full border border-zinc-300 px-4 py-2 text-sm font-medium text-zinc-800 hover:bg-zinc-100 dark:border-zinc-700 dark:text-zinc-200 dark:hover:bg-zinc-800"
               >
                 Brand kit
+              </Link>
+              <Link
+                href="/social"
+                className="rounded-full border border-zinc-300 px-4 py-2 text-sm font-medium text-zinc-800 hover:bg-zinc-100 dark:border-zinc-700 dark:text-zinc-200 dark:hover:bg-zinc-800"
+              >
+                Social accounts
               </Link>
             </nav>
           )}

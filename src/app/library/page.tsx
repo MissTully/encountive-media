@@ -4,7 +4,12 @@ import { getProfile } from "@/lib/auth";
 import { createClient } from "@/lib/supabase/server";
 import { embedText, hasGeminiKey } from "@/lib/embeddings";
 import { firstParam, sanitizeSearch } from "@/lib/search";
-import { analyzePendingAssets, resetStuckAssets } from "./actions";
+import {
+  analyzePendingAssets,
+  resetStuckAssets,
+  updateAsset,
+  deleteAsset,
+} from "./actions";
 
 // Always render fresh so newly-processed images and searches reflect live data.
 export const dynamic = "force-dynamic";
@@ -294,10 +299,26 @@ export default async function LibraryPage({
                   )}
                 </div>
                 <div className="flex flex-col gap-1 px-2.5 py-2">
-                  <div className="flex items-center justify-between gap-2">
-                    <span className="truncate text-xs font-medium text-zinc-800 dark:text-zinc-200">
-                      {a.title ?? "Untitled"}
-                    </span>
+                  <div className="flex items-center justify-between gap-1">
+                    <form
+                      action={updateAsset}
+                      className="flex min-w-0 flex-1 items-center gap-1"
+                    >
+                      <input type="hidden" name="id" value={a.id} />
+                      <input
+                        name="title"
+                        defaultValue={a.title ?? ""}
+                        placeholder="Untitled"
+                        aria-label="Image title"
+                        className="min-w-0 flex-1 rounded border border-transparent bg-transparent px-1 py-0.5 text-xs font-medium text-zinc-800 hover:border-zinc-200 focus:border-zinc-400 focus:outline-none dark:text-zinc-200 dark:hover:border-zinc-800 dark:focus:border-zinc-600"
+                      />
+                      <button
+                        type="submit"
+                        className="shrink-0 rounded-full border border-zinc-200 px-2 py-0.5 text-[10px] font-medium text-zinc-600 hover:bg-zinc-100 dark:border-zinc-800 dark:text-zinc-400 dark:hover:bg-zinc-800"
+                      >
+                        Save
+                      </button>
+                    </form>
                     {a.status && (
                       <span
                         className={`shrink-0 rounded-full px-2 py-0.5 text-[10px] font-medium ${
@@ -308,11 +329,24 @@ export default async function LibraryPage({
                       </span>
                     )}
                   </div>
-                  {a.tags.length > 0 && (
-                    <span className="truncate text-[11px] text-zinc-500">
-                      {a.tags.slice(0, 4).join(" · ")}
-                    </span>
-                  )}
+                  <div className="flex items-center justify-between gap-2">
+                    {a.tags.length > 0 ? (
+                      <span className="truncate text-[11px] text-zinc-500">
+                        {a.tags.slice(0, 4).join(" · ")}
+                      </span>
+                    ) : (
+                      <span />
+                    )}
+                    <form action={deleteAsset}>
+                      <input type="hidden" name="id" value={a.id} />
+                      <button
+                        type="submit"
+                        className="shrink-0 text-[10px] font-medium text-red-500 hover:text-red-700 dark:hover:text-red-400"
+                      >
+                        Delete
+                      </button>
+                    </form>
+                  </div>
                 </div>
               </li>
             ))}

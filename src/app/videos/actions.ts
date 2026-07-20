@@ -94,9 +94,17 @@ export async function updateVideoSettings(videoId: string, formData: FormData) {
   revalidatePath(`/videos/${videoId}`);
 }
 
-/** Append selected library images to the timeline, one clip each. */
-export async function addClipsToVideo(videoId: string, assetIds: string[]) {
-  if (assetIds.length === 0) return;
+/**
+ * Append selected media to the timeline, one clip each — still images from
+ * the image library (imageId) and/or clips from the video-clip library
+ * (clipId).
+ */
+export async function addClipsToVideo(
+  videoId: string,
+  items: Array<{ imageId?: string; clipId?: string }>,
+) {
+  const valid = items.filter((it) => it.imageId || it.clipId);
+  if (valid.length === 0) return;
 
   await requireProfile();
 
@@ -107,9 +115,10 @@ export async function addClipsToVideo(videoId: string, assetIds: string[]) {
     .eq("video_id", videoId);
   const base = count ?? 0;
 
-  const rows = assetIds.map((asset_id, i) => ({
+  const rows = valid.map((it, i) => ({
     video_id: videoId,
-    asset_id,
+    asset_id: it.imageId ?? null,
+    video_asset_id: it.clipId ?? null,
     position: base + i,
   }));
   const { error } = await supabase.from("video_clips").insert(rows);

@@ -423,6 +423,180 @@ export type Database = {
           },
         ]
       }
+      social_connections: {
+        Row: {
+          access_token: string
+          account_scope: string
+          created_at: string
+          display_name: string
+          external_id: string
+          id: string
+          metadata: Json
+          org_id: string
+          provider: string
+          status: string
+          token_expires_at: string | null
+        }
+        Insert: {
+          access_token: string
+          account_scope: string
+          created_at?: string
+          display_name: string
+          external_id: string
+          id?: string
+          metadata?: Json
+          org_id: string
+          provider: string
+          status?: string
+          token_expires_at?: string | null
+        }
+        Update: {
+          access_token?: string
+          account_scope?: string
+          created_at?: string
+          display_name?: string
+          external_id?: string
+          id?: string
+          metadata?: Json
+          org_id?: string
+          provider?: string
+          status?: string
+          token_expires_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "social_connections_org_id_fkey"
+            columns: ["org_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      social_posts: {
+        Row: {
+          caption: string | null
+          connection_id: string | null
+          created_at: string
+          error: string | null
+          external_url: string | null
+          id: string
+          org_id: string
+          posted_at: string | null
+          request_id: string | null
+          status: string
+          video_id: string | null
+        }
+        Insert: {
+          caption?: string | null
+          connection_id?: string | null
+          created_at?: string
+          error?: string | null
+          external_url?: string | null
+          id?: string
+          org_id: string
+          posted_at?: string | null
+          request_id?: string | null
+          status?: string
+          video_id?: string | null
+        }
+        Update: {
+          caption?: string | null
+          connection_id?: string | null
+          created_at?: string
+          error?: string | null
+          external_url?: string | null
+          id?: string
+          org_id?: string
+          posted_at?: string | null
+          request_id?: string | null
+          status?: string
+          video_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "social_posts_connection_id_fkey"
+            columns: ["connection_id"]
+            isOneToOne: false
+            referencedRelation: "social_connections"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "social_posts_org_id_fkey"
+            columns: ["org_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "social_posts_request_id_fkey"
+            columns: ["request_id"]
+            isOneToOne: false
+            referencedRelation: "content_requests"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "social_posts_video_id_fkey"
+            columns: ["video_id"]
+            isOneToOne: false
+            referencedRelation: "videos"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      video_assets: {
+        Row: {
+          created_at: string
+          duration_seconds: number | null
+          height: number | null
+          id: string
+          mime_type: string | null
+          org_id: string
+          source: string
+          status: string
+          storage_path: string
+          tags: string[]
+          title: string | null
+          width: number | null
+        }
+        Insert: {
+          created_at?: string
+          duration_seconds?: number | null
+          height?: number | null
+          id?: string
+          mime_type?: string | null
+          org_id: string
+          source?: string
+          status?: string
+          storage_path: string
+          tags?: string[]
+          title?: string | null
+          width?: number | null
+        }
+        Update: {
+          created_at?: string
+          duration_seconds?: number | null
+          height?: number | null
+          id?: string
+          mime_type?: string | null
+          org_id?: string
+          source?: string
+          status?: string
+          storage_path?: string
+          tags?: string[]
+          title?: string | null
+          width?: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "video_assets_org_id_fkey"
+            columns: ["org_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       video_clips: {
         Row: {
           asset_id: string | null
@@ -432,6 +606,7 @@ export type Database = {
           headline: string | null
           id: string
           position: number
+          video_asset_id: string | null
           video_id: string
         }
         Insert: {
@@ -442,6 +617,7 @@ export type Database = {
           headline?: string | null
           id?: string
           position?: number
+          video_asset_id?: string | null
           video_id: string
         }
         Update: {
@@ -452,6 +628,7 @@ export type Database = {
           headline?: string | null
           id?: string
           position?: number
+          video_asset_id?: string | null
           video_id?: string
         }
         Relationships: [
@@ -460,6 +637,13 @@ export type Database = {
             columns: ["asset_id"]
             isOneToOne: false
             referencedRelation: "assets"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "video_clips_video_asset_id_fkey"
+            columns: ["video_asset_id"]
+            isOneToOne: false
+            referencedRelation: "video_assets"
             referencedColumns: ["id"]
           },
           {

@@ -10,6 +10,8 @@ import {
   setCarouselAudio,
 } from "../../../actions";
 import { createVideoFromCarousel } from "../../../../videos/actions";
+import { publishCarouselToSocial } from "../../../../social/actions";
+import { ShareCard } from "@/components/share-card";
 import { trackLabel } from "@/lib/format";
 import { firstParam } from "@/lib/search";
 import { VideoPreview, type PreviewSlide } from "@/components/video-preview";
@@ -137,6 +139,13 @@ export default async function RequestDetailPage({
     isRendered: s.renderUrl !== null,
     durationSeconds: 4,
   }));
+
+  const { data: connections } = await supabase
+    .from("social_connections")
+    .select("id, provider, display_name, account_scope")
+    .eq("status", "connected")
+    .order("provider", { ascending: true });
+  const hasRenderedSlides = slides.some((s) => s.renderUrl !== null);
 
   return (
     <div className="flex flex-1 flex-col items-center bg-zinc-50 font-sans dark:bg-black">
@@ -303,6 +312,15 @@ export default async function RequestDetailPage({
               )}
             </form>
           </section>
+        )}
+
+        {request.status === "approved" && slides.length > 0 && (
+          <ShareCard
+            action={publishCarouselToSocial.bind(null, requestId, id)}
+            connections={connections ?? []}
+            ready={hasRenderedSlides}
+            readyHint="The finished slide renders are what get posted — this carousel has none yet."
+          />
         )}
 
         {slides.length === 0 ? (

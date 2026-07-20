@@ -3,6 +3,7 @@
 import { useMemo, useState, useTransition } from "react";
 import Link from "next/link";
 import { VideoPreview, type PreviewSlide } from "@/components/video-preview";
+import { TimelineTracks } from "@/components/timeline-tracks";
 import {
   addClipsToVideo,
   moveClip,
@@ -19,12 +20,17 @@ export interface EditorClip {
   bodyCopy: string | null;
   durationSeconds: number;
   imageUrl: string | null;
+  mediaType: "image" | "video";
 }
 
 interface PickerAsset {
   id: string;
   title: string | null;
   url: string | null;
+}
+
+interface PickerClip extends PickerAsset {
+  durationSeconds: number | null;
 }
 
 /**
@@ -36,6 +42,7 @@ export function Editor({
   video,
   clips,
   pickerAssets,
+  pickerClips,
   tracks,
   audioUrl,
   outputUrl,
@@ -54,6 +61,7 @@ export function Editor({
   };
   clips: EditorClip[];
   pickerAssets: PickerAsset[];
+  pickerClips: PickerClip[];
   tracks: Array<{ id: string; label: string }>;
   audioUrl: string | null;
   outputUrl: string | null;
@@ -62,8 +70,11 @@ export function Editor({
   notice: string;
 }) {
   const [pickerOpen, setPickerOpen] = useState(clips.length === 0);
+  const [pickerTab, setPickerTab] = useState<"images" | "clips">("images");
+  // Selection keys carry the media kind: "img:<id>" or "vid:<id>".
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [filter, setFilter] = useState("");
+  const [elapsed, setElapsed] = useState(0);
   const [pending, startTransition] = useTransition();
 
   const audioLabel =
@@ -76,31 +87,35 @@ export function Editor({
     imageUrl: c.imageUrl,
     isRendered: false,
     durationSeconds: c.durationSeconds,
+    mediaType: c.mediaType,
   }));
 
   const totalSeconds = clips.reduce((sum, c) => sum + c.durationSeconds, 0);
 
   const visibleAssets = useMemo(() => {
     const f = filter.trim().toLowerCase();
-    if (!f) return pickerAssets;
-    return pickerAssets.filter((a) =>
-      (a.title ?? "").toLowerCase().includes(f),
-    );
-  }, [pickerAssets, filter]);
+    const pool = pickerTab === "images" ? pickerAssets : pickerClips;
+    if (!f) return pool;
+    return pool.filter((a) => (a.title ?? "").toLowerCase().includes(f));
+  }, [pickerAssets, pickerClips, pickerTab, filter]);
 
-  function toggleAsset(id: string) {
+  function toggleAsset(key: string) {
     setSelected((prev) => {
       const next = new Set(prev);
-      if (next.has(id)) next.delete(id);
-      else next.add(id);
+      if (next.has(key)) next.delete(key);
+      else next.add(key);
       return next;
     });
   }
 
   function addSelected() {
-    const ids = Array.from(selected);
+    const items = Array.from(selected).map((key) =>
+      key.startsWith("img:")
+        ? { imageId: key.slice(4) }
+        : { clipId: key.slice(4) },
+    );
     startTransition(async () => {
-      await addClipsToVideo(video.id, ids);
+      await addClipsToVideo(video.id, items);
       setSelected(new Set());
       setPickerOpen(false);
     });
@@ -182,6 +197,23 @@ export function Editor({
         </p>
       )}
 
+      {/* Track view: visuals and soundtrack on separate lanes, shared
+          time scale, playhead driven by the preview player. */}
+      {clips.length > 0 && (
+        <TimelineTracks
+          clips={clips.map((c) => ({
+            id: c.id,
+            label: c.headline,
+            durationSeconds: c.durationSeconds,
+            mediaType: c.mediaType,
+            mediaUrl: c.imageUrl,
+          }))}
+          audioUrl={audioUrl}
+          audioLabel={audioLabel}
+          elapsed={elapsed}
+        />
+      )}
+
       <div className="grid gap-6 lg:grid-cols-[1fr_minmax(20rem,24rem)]">
         {/* Timeline: the clips in play order. */}
         <section className="flex flex-col gap-3">
@@ -200,12 +232,37 @@ export function Editor({
 
           {pickerOpen && (
             <div className="flex flex-col gap-3 rounded-xl border border-zinc-200 bg-white p-4 dark:border-zinc-800 dark:bg-zinc-950">
+              <div className="flex gap-1 rounded-full bg-zinc-100 p-1 dark:bg-zinc-900">
+                {(
+                  [
+                    ["images", `Images (${pickerAssets.length})`],
+                    ["clips", `Video clips (${pickerClips.length})`],
+                  ] as const
+                ).map(([tab, label]) => (
+                  <button
+                    key={tab}
+                    type="button"
+                    onClick={() => setPickerTab(tab)}
+                    className={`flex-1 rounded-full px-3 py-1.5 text-sm font-medium ${
+                      pickerTab === tab
+                        ? "bg-white text-zinc-900 shadow-sm dark:bg-zinc-700 dark:text-zinc-100"
+                        : "text-zinc-500 hover:text-zinc-800 dark:hover:text-zinc-300"
+                    }`}
+                  >
+                    {label}
+                  </button>
+                ))}
+              </div>
               <div className="flex items-center gap-3">
                 <input
                   type="search"
                   value={filter}
                   onChange={(e) => setFilter(e.target.value)}
-                  placeholder="Filter recent library images…"
+                  placeholder={
+                    pickerTab === "images"
+                      ? "Filter recent library images…"
+                      : "Filter video clips…"
+                  }
                   className="flex-1 rounded-full border border-zinc-300 bg-white px-4 py-2 text-sm text-zinc-900 outline-none focus:border-zinc-500 dark:border-zinc-700 dark:bg-zinc-950 dark:text-zinc-100"
                 />
                 <button
@@ -219,23 +276,36 @@ export function Editor({
                     : `Add ${selected.size || ""} clip${selected.size === 1 ? "" : "s"}`.trim()}
                 </button>
               </div>
-              {pickerAssets.length === 0 ? (
+              {visibleAssets.length === 0 ? (
                 <p className="py-6 text-center text-sm text-zinc-500">
-                  No ready images in the library yet —{" "}
-                  <Link href="/upload" className="underline">
-                    upload some
-                  </Link>{" "}
-                  first.
+                  {pickerTab === "images" ? (
+                    <>
+                      No ready images in the library yet —{" "}
+                      <Link href="/upload" className="underline">
+                        upload some
+                      </Link>{" "}
+                      first.
+                    </>
+                  ) : (
+                    <>
+                      No video clips yet —{" "}
+                      <Link href="/clips/upload" className="underline">
+                        upload b-roll and product footage
+                      </Link>{" "}
+                      first.
+                    </>
+                  )}
                 </p>
               ) : (
                 <ul className="grid max-h-72 grid-cols-3 gap-2 overflow-y-auto sm:grid-cols-4 md:grid-cols-5">
                   {visibleAssets.map((a) => {
-                    const isSelected = selected.has(a.id);
+                    const key = `${pickerTab === "images" ? "img" : "vid"}:${a.id}`;
+                    const isSelected = selected.has(key);
                     return (
-                      <li key={a.id}>
+                      <li key={key}>
                         <button
                           type="button"
-                          onClick={() => toggleAsset(a.id)}
+                          onClick={() => toggleAsset(key)}
                           className={`relative block w-full overflow-hidden rounded-lg border-2 ${
                             isSelected
                               ? "border-blue-500"
@@ -243,7 +313,15 @@ export function Editor({
                           }`}
                           title={a.title ?? undefined}
                         >
-                          {a.url ? (
+                          {a.url && pickerTab === "clips" ? (
+                            <video
+                              src={a.url}
+                              muted
+                              playsInline
+                              preload="metadata"
+                              className="aspect-square w-full object-cover"
+                            />
+                          ) : a.url ? (
                             // eslint-disable-next-line @next/next/no-img-element
                             <img
                               src={a.url}
@@ -258,6 +336,11 @@ export function Editor({
                           {isSelected && (
                             <span className="absolute right-1 top-1 flex h-5 w-5 items-center justify-center rounded-full bg-blue-500 text-xs font-bold text-white">
                               ✓
+                            </span>
+                          )}
+                          {pickerTab === "clips" && (
+                            <span className="absolute bottom-1 left-1 rounded bg-black/60 px-1 text-[10px] font-medium text-white">
+                              ▶
                             </span>
                           )}
                         </button>
@@ -307,8 +390,16 @@ export function Editor({
                       ↓
                     </button>
                   </div>
-                  <div className="h-24 w-24 shrink-0 overflow-hidden rounded-lg bg-zinc-100 dark:bg-zinc-900">
-                    {c.imageUrl ? (
+                  <div className="relative h-24 w-24 shrink-0 overflow-hidden rounded-lg bg-zinc-100 dark:bg-zinc-900">
+                    {c.imageUrl && c.mediaType === "video" ? (
+                      <video
+                        src={c.imageUrl}
+                        muted
+                        playsInline
+                        preload="metadata"
+                        className="h-full w-full object-cover"
+                      />
+                    ) : c.imageUrl ? (
                       // eslint-disable-next-line @next/next/no-img-element
                       <img
                         src={c.imageUrl}
@@ -317,8 +408,13 @@ export function Editor({
                       />
                     ) : (
                       <div className="flex h-full items-center justify-center text-xs text-zinc-400">
-                        no image
+                        no media
                       </div>
+                    )}
+                    {c.mediaType === "video" && (
+                      <span className="absolute right-1 top-1 rounded bg-black/60 px-1 text-[10px] font-medium text-white">
+                        ▶
+                      </span>
                     )}
                   </div>
                   <form
@@ -391,6 +487,7 @@ export function Editor({
               audioLabel={audioLabel}
               canvasWidth={video.width}
               canvasHeight={video.height}
+              onProgress={setElapsed}
             />
           )}
 

@@ -137,15 +137,62 @@ export interface Video {
   created_at: string;
 }
 
-/** One clip in a video — a library image held on screen for a few seconds. */
+/** One clip in a video — an image or a video-clip asset held on screen. */
 export interface VideoClip {
   id: UUID;
   video_id: UUID;
   position: number;
-  asset_id: UUID | null;
+  asset_id: UUID | null; // a still image from the image library…
+  video_asset_id: UUID | null; // …or a clip from the video-clip library
   headline: string | null; // overlaid at the render layer, never baked in
   body_copy: string | null;
   duration_seconds: number;
+  created_at: string;
+}
+
+/** The video-clip library — uploaded video files (b-roll, product clips). */
+export interface VideoAsset {
+  id: UUID;
+  org_id: UUID;
+  storage_path: string; // path in the `clips` storage bucket
+  title: string | null;
+  tags: string[];
+  source: AssetSource;
+  status: AssetStatus;
+  mime_type: string | null;
+  duration_seconds: number | null;
+  width: number | null;
+  height: number | null;
+  created_at: string;
+}
+
+/** A connected social posting destination (page, IG account, LinkedIn…). */
+export interface SocialConnection {
+  id: UUID;
+  org_id: UUID;
+  provider: "facebook" | "instagram" | "linkedin";
+  account_scope: "personal" | "company";
+  display_name: string;
+  external_id: string;
+  access_token: string;
+  token_expires_at: string | null;
+  metadata: Record<string, unknown>; // provider extras (page token, IG id…)
+  status: "connected" | "expired" | "error";
+  created_at: string;
+}
+
+/** One publish attempt of a video or carousel to a social destination. */
+export interface SocialPost {
+  id: UUID;
+  org_id: UUID;
+  connection_id: UUID | null;
+  video_id: UUID | null;
+  request_id: UUID | null; // when sharing a carousel
+  caption: string | null;
+  status: "queued" | "posting" | "posted" | "failed";
+  external_url: string | null;
+  error: string | null;
+  posted_at: string | null;
   created_at: string;
 }
 
