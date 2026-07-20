@@ -10,6 +10,7 @@ const LINKS = [
   { href: "/music", label: "Music" },
   { href: "/videos", label: "Video Studio" },
   { href: "/brand", label: "Brand Kit" },
+  { href: "/connections", label: "Connections" },
 ] as const;
 
 export function NavLinks() {

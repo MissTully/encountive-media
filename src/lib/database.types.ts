@@ -417,6 +417,60 @@ export type Database = {
           },
         ]
       }
+      publications: {
+        Row: {
+          caption: string
+          created_at: string
+          error: string | null
+          id: string
+          post_ref: string | null
+          post_url: string | null
+          published_at: string | null
+          request_id: string
+          social_account_id: string
+          status: string
+        }
+        Insert: {
+          caption?: string
+          created_at?: string
+          error?: string | null
+          id?: string
+          post_ref?: string | null
+          post_url?: string | null
+          published_at?: string | null
+          request_id: string
+          social_account_id: string
+          status?: string
+        }
+        Update: {
+          caption?: string
+          created_at?: string
+          error?: string | null
+          id?: string
+          post_ref?: string | null
+          post_url?: string | null
+          published_at?: string | null
+          request_id?: string
+          social_account_id?: string
+          status?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "publications_request_id_fkey"
+            columns: ["request_id"]
+            isOneToOne: false
+            referencedRelation: "content_requests"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "publications_social_account_id_fkey"
+            columns: ["social_account_id"]
+            isOneToOne: false
+            referencedRelation: "social_accounts"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       slide_comments: {
         Row: {
           author_id: string | null
@@ -503,6 +557,63 @@ export type Database = {
             columns: ["carousel_id"]
             isOneToOne: false
             referencedRelation: "carousels"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      social_accounts: {
+        Row: {
+          access_token: string
+          connected_by: string | null
+          created_at: string
+          display_name: string
+          external_id: string
+          id: string
+          metadata: Json
+          org_id: string
+          platform: string
+          refresh_token: string | null
+          token_expires_at: string | null
+        }
+        Insert: {
+          access_token: string
+          connected_by?: string | null
+          created_at?: string
+          display_name: string
+          external_id: string
+          id?: string
+          metadata?: Json
+          org_id: string
+          platform: string
+          refresh_token?: string | null
+          token_expires_at?: string | null
+        }
+        Update: {
+          access_token?: string
+          connected_by?: string | null
+          created_at?: string
+          display_name?: string
+          external_id?: string
+          id?: string
+          metadata?: Json
+          org_id?: string
+          platform?: string
+          refresh_token?: string | null
+          token_expires_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "social_accounts_connected_by_fkey"
+            columns: ["connected_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "social_accounts_org_id_fkey"
+            columns: ["org_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
             referencedColumns: ["id"]
           },
         ]
