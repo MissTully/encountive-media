@@ -114,6 +114,12 @@ export default async function Home() {
                 Asset library
               </Link>
               <Link
+                href="/music"
+                className="rounded-full border border-zinc-300 px-4 py-2 text-sm font-medium text-zinc-800 hover:bg-zinc-100 dark:border-zinc-700 dark:text-zinc-200 dark:hover:bg-zinc-800"
+              >
+                Music library
+              </Link>
+              <Link
                 href="/projects"
                 className="rounded-full border border-zinc-300 px-4 py-2 text-sm font-medium text-zinc-800 hover:bg-zinc-100 dark:border-zinc-700 dark:text-zinc-200 dark:hover:bg-zinc-800"
               >

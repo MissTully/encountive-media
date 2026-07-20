@@ -73,6 +73,56 @@ export type Database = {
           },
         ]
       }
+      audio_assets: {
+        Row: {
+          artist: string | null
+          created_at: string
+          duration_seconds: number | null
+          id: string
+          mime_type: string | null
+          org_id: string
+          source: string
+          status: string
+          storage_path: string
+          tags: string[]
+          title: string | null
+        }
+        Insert: {
+          artist?: string | null
+          created_at?: string
+          duration_seconds?: number | null
+          id?: string
+          mime_type?: string | null
+          org_id: string
+          source?: string
+          status?: string
+          storage_path: string
+          tags?: string[]
+          title?: string | null
+        }
+        Update: {
+          artist?: string | null
+          created_at?: string
+          duration_seconds?: number | null
+          id?: string
+          mime_type?: string | null
+          org_id?: string
+          source?: string
+          status?: string
+          storage_path?: string
+          tags?: string[]
+          title?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "audio_assets_org_id_fkey"
+            columns: ["org_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       brand_kits: {
         Row: {
           colors: Json
@@ -116,6 +166,7 @@ export type Database = {
       }
       carousels: {
         Row: {
+          audio_asset_id: string | null
           created_at: string
           id: string
           output_path: string | null
@@ -124,6 +175,7 @@ export type Database = {
           status: string
         }
         Insert: {
+          audio_asset_id?: string | null
           created_at?: string
           id?: string
           output_path?: string | null
@@ -132,6 +184,7 @@ export type Database = {
           status?: string
         }
         Update: {
+          audio_asset_id?: string | null
           created_at?: string
           id?: string
           output_path?: string | null
@@ -140,6 +193,13 @@ export type Database = {
           status?: string
         }
         Relationships: [
+          {
+            foreignKeyName: "carousels_audio_asset_id_fkey"
+            columns: ["audio_asset_id"]
+            isOneToOne: false
+            referencedRelation: "audio_assets"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "carousels_request_id_fkey"
             columns: ["request_id"]

@@ -69,6 +69,21 @@ export interface Asset {
   created_at: string;
 }
 
+/** The music library — uploaded audio tracks, mirroring the image library. */
+export interface AudioAsset {
+  id: UUID;
+  org_id: UUID;
+  storage_path: string; // path in the `audio` storage bucket
+  title: string | null; // defaults to the file name; editable
+  artist: string | null;
+  tags: string[];
+  source: AssetSource;
+  status: AssetStatus;
+  mime_type: string | null;
+  duration_seconds: number | null; // read in the browser at upload time
+  created_at: string;
+}
+
 export interface Project {
   id: UUID;
   org_id: UUID;
@@ -103,6 +118,7 @@ export interface Carousel {
   status: string;
   slide_count: number;
   output_path: string | null; // finished carousel in the `renders` bucket
+  audio_asset_id: UUID | null; // soundtrack for the video preview
   created_at: string;
 }
 

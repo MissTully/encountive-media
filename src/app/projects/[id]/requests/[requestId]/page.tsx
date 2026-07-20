@@ -7,7 +7,9 @@ import {
   requeueRequest,
   reopenRequest,
   generateCarouselNow,
+  setCarouselAudio,
 } from "../../../actions";
+import { VideoPreview, type PreviewSlide } from "./video-preview";
 
 export const dynamic = "force-dynamic";
 // In-app generation (copy + per-slide embedding/selection, optional image
@@ -53,7 +55,7 @@ export default async function RequestDetailPage({
 
   const { data: carousel } = await supabase
     .from("carousels")
-    .select("id, status, slide_count")
+    .select("id, status, slide_count, audio_asset_id")
     .eq("request_id", requestId)
     .order("created_at", { ascending: false })
     .limit(1)
@@ -91,6 +93,45 @@ export default async function RequestDetailPage({
       }),
     );
   }
+
+  // Music library tracks for the soundtrack picker, plus a signed URL for the
+  // currently selected track so the video preview can play it.
+  const { data: trackRows } = await supabase
+    .from("audio_assets")
+    .select("id, title, artist")
+    .eq("status", "ready")
+    .order("created_at", { ascending: false });
+  const tracks = trackRows ?? [];
+
+  let audioUrl: string | null = null;
+  let audioLabel: string | null = null;
+  if (carousel?.audio_asset_id) {
+    const track = tracks.find((t) => t.id === carousel.audio_asset_id);
+    if (track) {
+      audioLabel = [track.title ?? "Untitled", track.artist]
+        .filter(Boolean)
+        .join(" — ");
+    }
+    const { data: audioRow } = await supabase
+      .from("audio_assets")
+      .select("storage_path")
+      .eq("id", carousel.audio_asset_id)
+      .single();
+    if (audioRow) {
+      const { data } = await supabase.storage
+        .from("audio")
+        .createSignedUrl(audioRow.storage_path, 3600);
+      audioUrl = data?.signedUrl ?? null;
+    }
+  }
+
+  const previewSlides: PreviewSlide[] = slides.map((s) => ({
+    id: s.id,
+    headline: s.headline,
+    bodyCopy: s.body_copy,
+    imageUrl: s.renderUrl ?? s.bgUrl,
+    isRendered: s.renderUrl !== null,
+  }));
 
   return (
     <div className="flex flex-1 flex-col items-center bg-zinc-50 font-sans dark:bg-black">
@@ -188,6 +229,65 @@ export default async function RequestDetailPage({
               </button>
             </form>
           </div>
+        )}
+
+        {carousel && slides.length > 0 && (
+          <section className="flex flex-col gap-4 rounded-xl border border-zinc-200 bg-white p-4 sm:p-6 dark:border-zinc-800 dark:bg-zinc-950">
+            <div className="flex flex-col gap-1">
+              <h2 className="text-lg font-semibold text-zinc-900 dark:text-zinc-100">
+                Video preview
+              </h2>
+              <p className="text-sm text-zinc-500">
+                How the finished video will look and sound — each slide holds
+                for a few seconds over your chosen soundtrack.
+              </p>
+            </div>
+
+            <VideoPreview
+              slides={previewSlides}
+              audioUrl={audioUrl}
+              audioLabel={audioLabel}
+            />
+
+            <form
+              action={setCarouselAudio.bind(null, carousel.id, requestId, id)}
+              className="flex flex-col gap-2 border-t border-zinc-100 pt-4 sm:flex-row sm:items-center dark:border-zinc-900"
+            >
+              <label
+                htmlFor="audio_asset_id"
+                className="text-sm font-medium text-zinc-700 dark:text-zinc-300"
+              >
+                Soundtrack
+              </label>
+              <select
+                id="audio_asset_id"
+                name="audio_asset_id"
+                defaultValue={carousel.audio_asset_id ?? ""}
+                className="flex-1 rounded-full border border-zinc-300 bg-white px-4 py-2 text-sm text-zinc-900 dark:border-zinc-700 dark:bg-zinc-950 dark:text-zinc-100"
+              >
+                <option value="">None (silent)</option>
+                {tracks.map((t) => (
+                  <option key={t.id} value={t.id}>
+                    {[t.title ?? "Untitled", t.artist].filter(Boolean).join(" — ")}
+                  </option>
+                ))}
+              </select>
+              <button
+                type="submit"
+                className="rounded-full bg-zinc-900 px-4 py-2 text-sm font-medium text-white hover:bg-zinc-700 dark:bg-zinc-100 dark:text-zinc-900 dark:hover:bg-zinc-300"
+              >
+                Set soundtrack
+              </button>
+              {tracks.length === 0 && (
+                <Link
+                  href="/music/upload"
+                  className="text-sm text-zinc-500 underline hover:text-zinc-800 dark:hover:text-zinc-300"
+                >
+                  Upload music first
+                </Link>
+              )}
+            </form>
+          </section>
         )}
 
         {slides.length === 0 ? (

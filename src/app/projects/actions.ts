@@ -99,6 +99,25 @@ export async function generateCarouselNow(
   );
 }
 
+/** Attach (or clear) the music track behind a carousel's video preview. */
+export async function setCarouselAudio(
+  carouselId: string,
+  requestId: string,
+  projectId: string,
+  formData: FormData,
+) {
+  const audioAssetId = String(formData.get("audio_asset_id") ?? "").trim();
+
+  const supabase = await createClient();
+  const { error } = await supabase
+    .from("carousels")
+    .update({ audio_asset_id: audioAssetId || null })
+    .eq("id", carouselId);
+  if (error) throw new Error(error.message);
+
+  revalidatePath(`/projects/${projectId}/requests/${requestId}`);
+}
+
 /** Approve a carousel that's in review (human approval before publishing). */
 export async function approveRequest(requestId: string, projectId: string) {
   const supabase = await createClient();
