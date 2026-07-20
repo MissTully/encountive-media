@@ -1,4 +1,5 @@
 import Link from "next/link";
+import Image from "next/image";
 import { getProfile } from "@/lib/auth";
 import { hasSupabaseConfig } from "@/lib/env";
 import { signOut } from "@/app/auth/actions";
@@ -18,7 +19,14 @@ export async function SiteNav() {
     <header className="sticky top-0 z-40 border-b border-line bg-surface/90 backdrop-blur">
       <div className="mx-auto flex w-full max-w-6xl items-center justify-between gap-4 px-6 py-3 sm:px-10">
         <div className="flex min-w-0 items-center gap-8">
-          <Link href="/" className="flex shrink-0 items-baseline gap-1.5">
+          <Link href="/" className="flex shrink-0 items-center gap-2">
+            <Image
+              src="/logo.svg"
+              alt="Encountive Media logo"
+              width={32}
+              height={32}
+              priority
+            />
             <span className="font-display text-lg font-semibold tracking-tight text-ink">
               Encountive
             </span>

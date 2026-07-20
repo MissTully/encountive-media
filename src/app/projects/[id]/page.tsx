@@ -1,4 +1,5 @@
 import Link from "next/link";
+import Image from "next/image";
 import { notFound, redirect } from "next/navigation";
 import { getProfile } from "@/lib/auth";
 import { createClient } from "@/lib/supabase/server";
@@ -224,19 +225,30 @@ export default async function ProjectBoardPage({
                 {(messages ?? []).map((m) => (
                   <li
                     key={m.id}
-                    className={`flex flex-col gap-1 ${m.role === "user" ? "items-end" : "items-start"}`}
+                    className={`flex gap-2 ${m.role === "user" ? "flex-row-reverse" : "flex-row"}`}
                   >
-                    <span className="px-1 text-[10px] font-medium uppercase tracking-widest text-muted">
-                      {m.role === "user" ? "You" : "Creative Director"}
-                    </span>
-                    <div
-                      className={`max-w-[85%] whitespace-pre-wrap rounded-2xl px-4 py-3 text-sm leading-6 sm:max-w-[75%] ${
-                        m.role === "user"
-                          ? "rounded-br-sm bg-accent text-white dark:text-ink"
-                          : "rounded-bl-sm bg-accent-soft/60 text-ink"
-                      }`}
-                    >
-                      {m.body}
+                    {m.role !== "user" && (
+                      <Image
+                        src="/logo.svg"
+                        alt="Encountive Media logo"
+                        width={28}
+                        height={28}
+                        className="mt-1 shrink-0 rounded-lg"
+                      />
+                    )}
+                    <div className="flex flex-col gap-1">
+                      <span className={`px-1 text-[10px] font-medium uppercase tracking-widest text-muted ${m.role === "user" ? "text-right" : ""}`}>
+                        {m.role === "user" ? "You" : "Creative Director"}
+                      </span>
+                      <div
+                        className={`max-w-[85%] whitespace-pre-wrap rounded-2xl px-4 py-3 text-sm leading-6 sm:max-w-[75%] ${
+                          m.role === "user"
+                            ? "rounded-br-sm bg-accent text-white dark:text-ink"
+                            : "rounded-bl-sm bg-accent-soft/60 text-ink"
+                        }`}
+                      >
+                        {m.body}
+                      </div>
                     </div>
                   </li>
                 ))}

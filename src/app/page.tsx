@@ -1,4 +1,5 @@
 import Link from "next/link";
+import Image from "next/image";
 import { createClient } from "@/lib/supabase/server";
 import { hasSupabaseConfig } from "@/lib/env";
 
@@ -109,6 +110,13 @@ export default async function Home() {
           <span className="rounded-full border border-line bg-surface px-4 py-1.5 text-[11px] font-medium uppercase tracking-[0.2em] text-muted">
             Encountive Inc · Department of Sales &amp; Marketing
           </span>
+          <Image
+            src="/logo.svg"
+            alt="Encountive Media logo"
+            width={80}
+            height={80}
+            priority
+          />
           <h1 className="font-display text-5xl font-semibold tracking-tight text-ink sm:text-7xl">
             Encountive{" "}
             <span className="font-light italic text-accent">Media</span>
