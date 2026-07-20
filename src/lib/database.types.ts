@@ -465,6 +465,133 @@ export type Database = {
           },
         ]
       }
+      social_accounts: {
+        Row: {
+          access_token: string
+          connected_by: string | null
+          created_at: string
+          display_name: string
+          external_id: string
+          id: string
+          metadata: Json
+          org_id: string
+          platform: string
+          refresh_token: string | null
+          token_expires_at: string | null
+        }
+        Insert: {
+          access_token: string
+          connected_by?: string | null
+          created_at?: string
+          display_name: string
+          external_id: string
+          id?: string
+          metadata?: Json
+          org_id: string
+          platform: string
+          refresh_token?: string | null
+          token_expires_at?: string | null
+        }
+        Update: {
+          access_token?: string
+          connected_by?: string | null
+          created_at?: string
+          display_name?: string
+          external_id?: string
+          id?: string
+          metadata?: Json
+          org_id?: string
+          platform?: string
+          refresh_token?: string | null
+          token_expires_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "social_accounts_connected_by_fkey"
+            columns: ["connected_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "social_accounts_org_id_fkey"
+            columns: ["org_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      social_posts: {
+        Row: {
+          account_id: string | null
+          account_name: string
+          caption: string | null
+          created_at: string
+          error: string | null
+          external_post_id: string | null
+          id: string
+          org_id: string
+          platform: string
+          post_url: string | null
+          published_at: string | null
+          status: string
+          video_id: string
+        }
+        Insert: {
+          account_id?: string | null
+          account_name: string
+          caption?: string | null
+          created_at?: string
+          error?: string | null
+          external_post_id?: string | null
+          id?: string
+          org_id: string
+          platform: string
+          post_url?: string | null
+          published_at?: string | null
+          status?: string
+          video_id: string
+        }
+        Update: {
+          account_id?: string | null
+          account_name?: string
+          caption?: string | null
+          created_at?: string
+          error?: string | null
+          external_post_id?: string | null
+          id?: string
+          org_id?: string
+          platform?: string
+          post_url?: string | null
+          published_at?: string | null
+          status?: string
+          video_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "social_posts_account_id_fkey"
+            columns: ["account_id"]
+            isOneToOne: false
+            referencedRelation: "social_accounts"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "social_posts_org_id_fkey"
+            columns: ["org_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "social_posts_video_id_fkey"
+            columns: ["video_id"]
+            isOneToOne: false
+            referencedRelation: "videos"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       video_clips: {
         Row: {
           asset_id: string | null

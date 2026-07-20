@@ -112,6 +112,14 @@ export default async function VideosPage() {
                 >
                   Open editor
                 </Link>
+                {v.status === "ready" && v.output_path && (
+                  <Link
+                    href={`/videos/${v.id}/publish`}
+                    className="shrink-0 rounded-full border border-zinc-300 px-4 py-1.5 text-sm font-medium text-zinc-800 hover:bg-zinc-100 dark:border-zinc-700 dark:text-zinc-200 dark:hover:bg-zinc-800"
+                  >
+                    Publish
+                  </Link>
+                )}
                 <form action={deleteVideo} className="shrink-0">
                   <input type="hidden" name="id" value={v.id} />
                   {/* Deleting removes the row and its rendered MP4 — slow
