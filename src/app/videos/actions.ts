@@ -229,6 +229,7 @@ export async function moveClip(
 export async function createVideoFromCarousel(
   requestId: string,
   projectId: string,
+  formData: FormData,
 ) {
   const ctx = await requireProfile();
   const backWithNotice = (message: string) =>
@@ -261,6 +262,10 @@ export async function createVideoFromCarousel(
     return backWithNotice("The carousel has no slides yet.");
   }
 
+  // Aspect-ratio preset chosen on the review page (platform-defaulted there);
+  // falls back to 4:5 portrait for direct POSTs without a format.
+  const format = FORMATS[String(formData.get("format") ?? "")] ?? FORMATS.portrait;
+
   const { data: video, error } = await supabase
     .from("videos")
     .insert({
@@ -268,6 +273,8 @@ export async function createVideoFromCarousel(
       project_id: projectId,
       title: request?.topic ? `${request.topic} — video` : "Carousel video",
       audio_asset_id: carousel.audio_asset_id,
+      width: format.width,
+      height: format.height,
     })
     .select("id")
     .single();

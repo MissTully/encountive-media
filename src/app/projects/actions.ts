@@ -156,6 +156,86 @@ export async function reopenRequest(requestId: string, projectId: string) {
   revalidatePath(`/projects/${projectId}/requests/${requestId}`);
 }
 
+/** Add a review comment to a single slide (slide-level change request). */
+export async function addSlideComment(
+  slideId: string,
+  requestId: string,
+  projectId: string,
+  formData: FormData,
+) {
+  const body = String(formData.get("body") ?? "").trim();
+  if (!body) return;
+
+  const ctx = await getProfile();
+  if (!ctx) redirect("/login");
+
+  const supabase = await createClient();
+  const { error } = await supabase.from("slide_comments").insert({
+    slide_id: slideId,
+    author_id: ctx.profile.id,
+    body,
+  });
+  if (error) throw new Error(error.message);
+
+  revalidatePath(`/projects/${projectId}/requests/${requestId}`);
+}
+
+/** Mark a slide comment resolved (or reopen it). */
+export async function setSlideCommentResolved(
+  commentId: string,
+  requestId: string,
+  projectId: string,
+  resolved: boolean,
+) {
+  const ctx = await getProfile();
+  if (!ctx) redirect("/login");
+
+  const supabase = await createClient();
+  const { error } = await supabase
+    .from("slide_comments")
+    .update({ resolved })
+    .eq("id", commentId);
+  if (error) throw new Error(error.message);
+
+  revalidatePath(`/projects/${projectId}/requests/${requestId}`);
+}
+
+/**
+ * Queue a fresh carousel with the same topic, brief, and platform — reuse a
+ * structure that worked for a follow-up post without retyping the brief.
+ */
+export async function duplicateRequest(requestId: string, projectId: string) {
+  const ctx = await getProfile();
+  if (!ctx) redirect("/login");
+
+  const supabase = await createClient();
+  const { data: original } = await supabase
+    .from("content_requests")
+    .select("project_id, brand_kit_id, topic, brief, target_platform")
+    .eq("id", requestId)
+    .single();
+  if (!original) return;
+
+  const { data: copy, error } = await supabase
+    .from("content_requests")
+    .insert({
+      project_id: original.project_id,
+      brand_kit_id: original.brand_kit_id,
+      topic: original.topic,
+      brief: original.brief,
+      target_platform: original.target_platform,
+      status: "queued",
+    })
+    .select("id")
+    .single();
+  if (error) throw new Error(error.message);
+
+  revalidatePath(`/projects/${projectId}`);
+  redirect(
+    `/projects/${projectId}/requests/${copy.id}?notice=${encodeURIComponent("Duplicated — generate when ready.")}`,
+  );
+}
+
 /** Remove a single asset from a project board. */
 export async function removeAssetFromProject(
   projectId: string,

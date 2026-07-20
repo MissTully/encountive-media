@@ -120,8 +120,14 @@ export async function writeCarouselCopy(input: {
   brief: string | null;
   targetPlatform: string | null;
   voiceGuidelines: string | null;
+  /**
+   * Reviewer change requests from the previous revision (pre-formatted, one
+   * slide per line with its copy and the reviewer's notes). When present the
+   * rewrite is targeted: flagged slides change, the rest stay close.
+   */
+  revisionNotes?: string | null;
 }): Promise<SlideCopy[]> {
-  const { topic, brief, targetPlatform, voiceGuidelines } = input;
+  const { topic, brief, targetPlatform, voiceGuidelines, revisionNotes } = input;
   const parts = await callGemini(TEXT_MODEL, {
     contents: [
       {
@@ -132,6 +138,7 @@ export async function writeCarouselCopy(input: {
 Topic: ${topic ?? "(none)"}
 Brief: ${brief ?? "(none)"}
 ${voiceGuidelines ? `Brand voice guidelines: ${voiceGuidelines}` : ""}
+${revisionNotes ? `\nThis is a revision. The previous version and the reviewer's slide-by-slide change requests are below. Rework the flagged slides to address every request; keep unflagged slides as close to the previous version as possible.\n${revisionNotes}` : ""}
 
 Slide 1 is a hook; the last slide is a call to action. Respond with a JSON array only, one object per slide:
 [{"headline": "max 8 words", "body_copy": "1-2 short sentences", "image_need": "one sentence describing the ideal background image (subject, style, mood) — no text in the image"}]`,
