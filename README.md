@@ -87,6 +87,28 @@ docs/                  # build specification
 All phases are built. See [`docs/test-report-2026-07-19.md`](docs/test-report-2026-07-19.md)
 for the full end-to-end test pass and the n8n outage diagnosis.
 
+## Publishing to social media
+
+Approval is no longer the end of the line: an approved carousel can be posted
+straight to **Instagram**, **Facebook**, or **LinkedIn** from its review
+screen, via each platform's official API (no third-party scheduler).
+
+- **Connections** (`/connections`) — connect destinations by pasting the
+  platform-side id and a long-lived token: an IG business-account id (Meta app
+  with `instagram_content_publish`), a Facebook Page id (`pages_manage_posts`
+  Page token), or a LinkedIn author URN (`w_organization_social` token).
+- **Publish panel** — on an approved request, pick a destination, edit the
+  prefilled caption, press **Publish now**. Instagram/Facebook fetch the
+  rendered slides from short-lived signed URLs; LinkedIn uploads the bytes.
+- **Publish log** — every attempt is a `publications` row (publishing →
+  published/failed) shown on the review screen with the post permalink or the
+  platform's error; a failed attempt is retried by pressing publish again.
+
+Human approval stays mandatory — nothing publishes until a person has
+approved the carousel and pressed the button. Tokens live in the
+`social_accounts` table (org-scoped RLS); move them to a proper secret store
+before offering this to external tenants.
+
 ## Generation runs in two places
 
 The n8n workflows poll on a schedule; the app can also run the same pipelines

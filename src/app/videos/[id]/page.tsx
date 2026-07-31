@@ -5,8 +5,7 @@ import { createClient } from "@/lib/supabase/server";
 import { hasCreatomateKey } from "@/lib/creatomate";
 import { trackLabel } from "@/lib/format";
 import { firstParam } from "@/lib/search";
-import { ShareCard } from "@/components/share-card";
-import { publishVideoToSocial } from "../../social/actions";
+import { publishVideo } from "../publish-actions";
 import { Editor, type EditorClip } from "./editor";
 
 // Always render fresh so clip edits and render status reflect live data.
@@ -77,11 +76,20 @@ export default async function VideoEditorPage({
   ]);
   if (!video) notFound();
 
-  const { data: connections } = await supabase
-    .from("social_connections")
-    .select("id, provider, display_name, account_scope")
-    .eq("status", "connected")
-    .order("provider", { ascending: true });
+  // Publishing: connected destinations plus this video's publish log.
+  const [{ data: socialAccounts }, { data: publications }] = await Promise.all([
+    supabase
+      .from("social_accounts")
+      .select("id, platform, display_name")
+      .order("created_at", { ascending: true }),
+    supabase
+      .from("publications")
+      .select(
+        "id, status, post_url, error, created_at, social_accounts(platform, display_name)",
+      )
+      .eq("video_id", id)
+      .order("created_at", { ascending: false }),
+  ]);
 
   // Sign everything in one batch per bucket, then look up by path.
   const rows = (clipRows ?? []) as Array<{
@@ -176,7 +184,7 @@ export default async function VideoEditorPage({
   }
 
   return (
-    <div className="flex flex-1 flex-col items-center bg-zinc-50 font-sans dark:bg-black">
+    <div className="flex flex-1 flex-col items-center font-sans">
       <main className="flex w-full max-w-5xl flex-1 flex-col gap-6 px-6 py-16 sm:px-10">
         <header className="flex flex-col gap-2">
           <Link
@@ -208,12 +216,121 @@ export default async function VideoEditorPage({
           notice={notice}
         />
 
-        <ShareCard
-          action={publishVideoToSocial.bind(null, video.id)}
-          connections={connections ?? []}
-          ready={video.status === "ready" && Boolean(video.output_path)}
-          readyHint="Render the MP4 first — the finished file is what gets posted."
-        />
+        {/* Publish — same panel + log as approved carousels, for the MP4. */}
+        <section className="flex flex-col gap-4 rounded-xl border border-zinc-200 bg-white p-4 sm:p-6 dark:border-zinc-800 dark:bg-zinc-950">
+          <div className="flex flex-col gap-1">
+            <h2 className="text-lg font-semibold text-zinc-900 dark:text-zinc-100">
+              Publish
+            </h2>
+            <p className="text-sm text-zinc-500">
+              Post the rendered MP4 straight to a connected account — a Reel on
+              Instagram, a Page video on Facebook, a video post on LinkedIn.
+              Each press publishes once and is recorded below.
+            </p>
+          </div>
+
+          {(socialAccounts ?? []).length === 0 ? (
+            <p className="text-sm text-zinc-600 dark:text-zinc-400">
+              No destinations connected yet —{" "}
+              <Link
+                href="/connections"
+                className="underline hover:text-zinc-900 dark:hover:text-zinc-200"
+              >
+                connect an account
+              </Link>{" "}
+              first.
+            </p>
+          ) : video.status !== "ready" || !video.output_path ? (
+            <p className="text-sm text-zinc-600 dark:text-zinc-400">
+              Render the MP4 first — the finished file is what gets published.
+            </p>
+          ) : (
+            <form
+              action={publishVideo.bind(null, video.id)}
+              className="flex flex-col gap-3"
+            >
+              <label className="flex flex-col gap-1.5">
+                <span className="text-sm font-medium text-zinc-700 dark:text-zinc-300">
+                  Caption
+                </span>
+                <textarea
+                  name="caption"
+                  rows={4}
+                  defaultValue={video.title}
+                  className="w-full rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm text-zinc-900 outline-none focus:border-zinc-500 dark:border-zinc-700 dark:bg-zinc-950 dark:text-zinc-100"
+                />
+              </label>
+              <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+                <select
+                  name="social_account_id"
+                  className="flex-1 rounded-full border border-zinc-300 bg-white px-4 py-2 text-sm text-zinc-900 dark:border-zinc-700 dark:bg-zinc-950 dark:text-zinc-100"
+                >
+                  {(socialAccounts ?? []).map((a) => (
+                    <option key={a.id} value={a.id}>
+                      {a.display_name}
+                    </option>
+                  ))}
+                </select>
+                <button
+                  type="submit"
+                  className="rounded-full bg-zinc-900 px-6 py-2 text-sm font-medium text-white hover:bg-zinc-700 dark:bg-zinc-100 dark:text-zinc-900 dark:hover:bg-zinc-300"
+                >
+                  Publish now →
+                </button>
+              </div>
+            </form>
+          )}
+
+          {(publications ?? []).length > 0 && (
+            <div className="flex flex-col gap-2 border-t border-zinc-100 pt-4 dark:border-zinc-900">
+              <h3 className="text-sm font-medium text-zinc-700 dark:text-zinc-300">
+                Publish log
+              </h3>
+              {(publications ?? []).map((p) => (
+                <div
+                  key={p.id}
+                  className="flex items-start gap-3 rounded-lg bg-zinc-50 px-3 py-2 text-sm dark:bg-zinc-900"
+                >
+                  <span
+                    className={`mt-0.5 shrink-0 rounded-full px-2 py-0.5 text-xs font-medium ${
+                      p.status === "published"
+                        ? "bg-green-100 text-green-700 dark:bg-green-950 dark:text-green-300"
+                        : p.status === "failed"
+                          ? "bg-red-100 text-red-700 dark:bg-red-950 dark:text-red-300"
+                          : "bg-blue-100 text-blue-700 dark:bg-blue-950 dark:text-blue-300"
+                    }`}
+                  >
+                    {p.status}
+                  </span>
+                  <div className="min-w-0 flex-1">
+                    <span className="text-zinc-800 dark:text-zinc-200">
+                      {(p.social_accounts as { display_name: string } | null)
+                        ?.display_name ?? "Removed account"}
+                    </span>
+                    <span className="ml-2 text-xs text-zinc-500">
+                      {new Date(p.created_at).toLocaleString()}
+                    </span>
+                    {p.status === "failed" && p.error && (
+                      <p className="mt-0.5 break-words text-xs text-red-600 dark:text-red-400">
+                        {p.error}
+                      </p>
+                    )}
+                  </div>
+                  {p.post_url && (
+                    <a
+                      href={p.post_url}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="shrink-0 text-xs font-medium underline hover:no-underline"
+                    >
+                      View post ↗
+                    </a>
+                  )}
+                </div>
+              ))}
+            </div>
+          )}
+        </section>
       </main>
     </div>
   );

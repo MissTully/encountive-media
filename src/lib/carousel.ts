@@ -55,6 +55,15 @@ export async function generateCarousel(
     return { ok: false, message: "Request was picked up by another run." };
   }
 
+  // Slide-level change requests: open comments on the previous revision's
+  // slides become targeted revision notes for the copywriter, and are marked
+  // resolved once the new carousel has been generated from them.
+  const revision = await loadRevisionNotes(supabase, requestId);
+
+  // Only the carousel this run creates may be cleaned up on failure — earlier
+  // revisions (and their review comments) must survive a failed regeneration.
+  let newCarouselId: string | null = null;
+
   try {
     // Brand voice: the request's kit, or the org's first kit as default.
     let voiceGuidelines: string | null = null;
@@ -69,6 +78,7 @@ export async function generateCarousel(
       brief: request.brief,
       targetPlatform: request.target_platform,
       voiceGuidelines,
+      revisionNotes: revision.notes,
     });
 
     const { data: carousel, error: carouselError } = await supabase
@@ -83,6 +93,7 @@ export async function generateCarousel(
     if (carouselError || !carousel) {
       throw new Error(carouselError?.message ?? "carousel insert failed");
     }
+    newCarouselId = carousel.id;
 
     const warnings: string[] = [];
     let rendered = 0;
@@ -175,25 +186,33 @@ export async function generateCarousel(
       .update({ status: "in_review" })
       .eq("id", requestId);
 
+    // The change requests have been worked into this revision — close them so
+    // the next regeneration doesn't re-apply stale feedback.
+    if (revision.openCommentIds.length > 0) {
+      await supabase
+        .from("slide_comments")
+        .update({ resolved: true })
+        .in("id", revision.openCommentIds);
+    }
+
     let message = `Generated ${slides.length} slides`;
     if (process.env.CREATOMATE_API_KEY) {
       message += `, rendered ${rendered}`;
     } else {
       message += " (rendering skipped — CREATOMATE_API_KEY not configured)";
     }
+    if (revision.openCommentIds.length > 0) {
+      message += `, applying ${revision.openCommentIds.length} slide change request${revision.openCommentIds.length === 1 ? "" : "s"}`;
+    }
     if (warnings.length > 0) message += `. Warnings: ${warnings.join("; ")}`;
     return { ok: true, message };
   } catch (e) {
-    // Leave no half-finished carousel behind, and requeue the request so it
-    // can be retried (by this button or by n8n once its credentials work).
-    const { data: partial } = await supabase
-      .from("carousels")
-      .select("id")
-      .eq("request_id", requestId)
-      .eq("status", "in_review");
-    for (const c of partial ?? []) {
-      await supabase.from("slides").delete().eq("carousel_id", c.id);
-      await supabase.from("carousels").delete().eq("id", c.id);
+    // Leave no half-finished carousel behind — but only the one this run
+    // created; earlier revisions and their comments must survive — and requeue
+    // the request so it can be retried (by this button or by n8n).
+    if (newCarouselId) {
+      await supabase.from("slides").delete().eq("carousel_id", newCarouselId);
+      await supabase.from("carousels").delete().eq("id", newCarouselId);
     }
     await supabase
       .from("content_requests")
@@ -204,6 +223,54 @@ export async function generateCarousel(
       message: `Generation failed and the request was re-queued: ${e instanceof Error ? e.message : e}`,
     };
   }
+}
+
+interface RevisionNotes {
+  /** Pre-formatted previous copy + reviewer requests, or null on first runs. */
+  notes: string | null;
+  /** The open comments the notes were built from, to resolve on success. */
+  openCommentIds: string[];
+}
+
+/**
+ * Build targeted revision notes from the latest carousel's slides and their
+ * open (unresolved) review comments. Returns notes = null when there is no
+ * previous carousel or no open comments — i.e. a regeneration without slide
+ * feedback stays a clean rewrite, exactly as before.
+ */
+async function loadRevisionNotes(
+  supabase: Supabase,
+  requestId: string,
+): Promise<RevisionNotes> {
+  const empty: RevisionNotes = { notes: null, openCommentIds: [] };
+
+  const { data: previous } = await supabase
+    .from("carousels")
+    .select("id")
+    .eq("request_id", requestId)
+    .order("created_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  if (!previous) return empty;
+
+  const { data: slides } = await supabase
+    .from("slides")
+    .select("position, headline, body_copy, slide_comments(id, body, resolved)")
+    .eq("carousel_id", previous.id)
+    .order("position", { ascending: true });
+  if (!slides) return empty;
+
+  const openCommentIds: string[] = [];
+  const lines = slides.map((s) => {
+    const open = (s.slide_comments ?? []).filter((c) => !c.resolved);
+    openCommentIds.push(...open.map((c) => c.id));
+    const copy = `Slide ${s.position + 1}: "${s.headline ?? ""}" — ${s.body_copy ?? ""}`;
+    if (open.length === 0) return copy;
+    return `${copy}\n${open.map((c) => `  Change request: ${c.body}`).join("\n")}`;
+  });
+  if (openCommentIds.length === 0) return empty;
+
+  return { notes: lines.join("\n"), openCommentIds };
 }
 
 /**

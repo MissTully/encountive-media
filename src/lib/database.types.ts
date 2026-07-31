@@ -307,6 +307,48 @@ export type Database = {
           },
         ]
       }
+      project_agent_messages: {
+        Row: {
+          author_id: string | null
+          body: string
+          created_at: string
+          id: string
+          project_id: string
+          role: string
+        }
+        Insert: {
+          author_id?: string | null
+          body: string
+          created_at?: string
+          id?: string
+          project_id: string
+          role: string
+        }
+        Update: {
+          author_id?: string | null
+          body?: string
+          created_at?: string
+          id?: string
+          project_id?: string
+          role?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "project_agent_messages_author_id_fkey"
+            columns: ["author_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "project_agent_messages_project_id_fkey"
+            columns: ["project_id"]
+            isOneToOne: false
+            referencedRelation: "projects"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       project_assets: {
         Row: {
           asset_id: string
@@ -375,6 +417,112 @@ export type Database = {
           },
         ]
       }
+      publications: {
+        Row: {
+          caption: string
+          created_at: string
+          error: string | null
+          id: string
+          post_ref: string | null
+          post_url: string | null
+          published_at: string | null
+          request_id: string | null
+          social_account_id: string
+          status: string
+          video_id: string | null
+        }
+        Insert: {
+          caption?: string
+          created_at?: string
+          error?: string | null
+          id?: string
+          post_ref?: string | null
+          post_url?: string | null
+          published_at?: string | null
+          request_id?: string | null
+          social_account_id: string
+          status?: string
+          video_id?: string | null
+        }
+        Update: {
+          caption?: string
+          created_at?: string
+          error?: string | null
+          id?: string
+          post_ref?: string | null
+          post_url?: string | null
+          published_at?: string | null
+          request_id?: string | null
+          social_account_id?: string
+          status?: string
+          video_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "publications_request_id_fkey"
+            columns: ["request_id"]
+            isOneToOne: false
+            referencedRelation: "content_requests"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "publications_social_account_id_fkey"
+            columns: ["social_account_id"]
+            isOneToOne: false
+            referencedRelation: "social_accounts"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "publications_video_id_fkey"
+            columns: ["video_id"]
+            isOneToOne: false
+            referencedRelation: "videos"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      slide_comments: {
+        Row: {
+          author_id: string | null
+          body: string
+          created_at: string
+          id: string
+          resolved: boolean
+          slide_id: string
+        }
+        Insert: {
+          author_id?: string | null
+          body: string
+          created_at?: string
+          id?: string
+          resolved?: boolean
+          slide_id: string
+        }
+        Update: {
+          author_id?: string | null
+          body?: string
+          created_at?: string
+          id?: string
+          resolved?: boolean
+          slide_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "slide_comments_author_id_fkey"
+            columns: ["author_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "slide_comments_slide_id_fkey"
+            columns: ["slide_id"]
+            isOneToOne: false
+            referencedRelation: "slides"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       slides: {
         Row: {
           asset_id: string | null
@@ -423,123 +571,59 @@ export type Database = {
           },
         ]
       }
-      social_connections: {
+      social_accounts: {
         Row: {
           access_token: string
-          account_scope: string
+          connected_by: string | null
           created_at: string
           display_name: string
           external_id: string
           id: string
           metadata: Json
           org_id: string
-          provider: string
-          status: string
+          platform: string
+          refresh_token: string | null
           token_expires_at: string | null
         }
         Insert: {
           access_token: string
-          account_scope: string
+          connected_by?: string | null
           created_at?: string
           display_name: string
           external_id: string
           id?: string
           metadata?: Json
           org_id: string
-          provider: string
-          status?: string
+          platform: string
+          refresh_token?: string | null
           token_expires_at?: string | null
         }
         Update: {
           access_token?: string
-          account_scope?: string
+          connected_by?: string | null
           created_at?: string
           display_name?: string
           external_id?: string
           id?: string
           metadata?: Json
           org_id?: string
-          provider?: string
-          status?: string
+          platform?: string
+          refresh_token?: string | null
           token_expires_at?: string | null
         }
         Relationships: [
           {
-            foreignKeyName: "social_connections_org_id_fkey"
+            foreignKeyName: "social_accounts_connected_by_fkey"
+            columns: ["connected_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "social_accounts_org_id_fkey"
             columns: ["org_id"]
             isOneToOne: false
             referencedRelation: "organizations"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
-      social_posts: {
-        Row: {
-          caption: string | null
-          connection_id: string | null
-          created_at: string
-          error: string | null
-          external_url: string | null
-          id: string
-          org_id: string
-          posted_at: string | null
-          request_id: string | null
-          status: string
-          video_id: string | null
-        }
-        Insert: {
-          caption?: string | null
-          connection_id?: string | null
-          created_at?: string
-          error?: string | null
-          external_url?: string | null
-          id?: string
-          org_id: string
-          posted_at?: string | null
-          request_id?: string | null
-          status?: string
-          video_id?: string | null
-        }
-        Update: {
-          caption?: string | null
-          connection_id?: string | null
-          created_at?: string
-          error?: string | null
-          external_url?: string | null
-          id?: string
-          org_id?: string
-          posted_at?: string | null
-          request_id?: string | null
-          status?: string
-          video_id?: string | null
-        }
-        Relationships: [
-          {
-            foreignKeyName: "social_posts_connection_id_fkey"
-            columns: ["connection_id"]
-            isOneToOne: false
-            referencedRelation: "social_connections"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "social_posts_org_id_fkey"
-            columns: ["org_id"]
-            isOneToOne: false
-            referencedRelation: "organizations"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "social_posts_request_id_fkey"
-            columns: ["request_id"]
-            isOneToOne: false
-            referencedRelation: "content_requests"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "social_posts_video_id_fkey"
-            columns: ["video_id"]
-            isOneToOne: false
-            referencedRelation: "videos"
             referencedColumns: ["id"]
           },
         ]

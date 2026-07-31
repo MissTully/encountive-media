@@ -4,24 +4,14 @@ import { getProfile } from "@/lib/auth";
 import { createClient } from "@/lib/supabase/server";
 import { embedText, hasGeminiKey } from "@/lib/embeddings";
 import { firstParam, sanitizeSearch } from "@/lib/search";
-import {
-  analyzePendingAssets,
-  resetStuckAssets,
-  updateAsset,
-  deleteAsset,
-} from "./actions";
+import { analyzePendingAssets, resetStuckAssets } from "./actions";
+import { LibraryGrid } from "./grid";
 
 // Always render fresh so newly-processed images and searches reflect live data.
 export const dynamic = "force-dynamic";
 // Analyzing a batch of images (vision + embedding per image) takes longer than
 // the default serverless window.
 export const maxDuration = 60;
-
-const STATUS_STYLES: Record<string, string> = {
-  uploaded: "bg-zinc-200 text-zinc-700 dark:bg-zinc-800 dark:text-zinc-300",
-  analyzing: "bg-blue-100 text-blue-700 dark:bg-blue-950 dark:text-blue-300",
-  ready: "bg-green-100 text-green-700 dark:bg-green-950 dark:text-green-300",
-};
 
 interface AssetCard {
   id: string;
@@ -32,6 +22,19 @@ interface AssetCard {
   status: string | null;
   similarity: number | null;
   url: string | null;
+  downloadUrl: string | null;
+}
+
+/** Filesystem-safe download name: the asset title + its stored extension. */
+function downloadFilename(title: string | null, storagePath: string): string {
+  const ext = storagePath.match(/\.[a-z0-9]+$/i)?.[0] ?? "";
+  const base =
+    (title ?? "")
+      .replace(/[^\p{L}\p{N} _-]+/gu, "")
+      .trim()
+      .replace(/\s+/g, "-")
+      .slice(0, 60) || "image";
+  return `${base}${ext}`;
 }
 
 export default async function LibraryPage({
@@ -69,7 +72,7 @@ export default async function LibraryPage({
       .eq("status", "analyzing"),
   ]);
 
-  let rows: Omit<AssetCard, "url">[] = [];
+  let rows: Omit<AssetCard, "url" | "downloadUrl">[] = [];
   let searchError: string | null = null;
 
   if (query && mode === "semantic") {
@@ -124,18 +127,26 @@ export default async function LibraryPage({
     }));
   }
 
-  // Private buckets → short-lived signed URLs for thumbnails.
+  // Private buckets → short-lived signed URLs: one to view the thumbnail, one
+  // with a Content-Disposition filename so "Download" saves the original file.
   const items: AssetCard[] = await Promise.all(
     rows.map(async (r) => {
-      const { data } = await supabase.storage
-        .from("assets")
-        .createSignedUrl(r.storage_path, 3600);
-      return { ...r, url: data?.signedUrl ?? null };
+      const [{ data: view }, { data: dl }] = await Promise.all([
+        supabase.storage.from("assets").createSignedUrl(r.storage_path, 3600),
+        supabase.storage.from("assets").createSignedUrl(r.storage_path, 3600, {
+          download: downloadFilename(r.title, r.storage_path),
+        }),
+      ]);
+      return {
+        ...r,
+        url: view?.signedUrl ?? null,
+        downloadUrl: dl?.signedUrl ?? null,
+      };
     }),
   );
 
   return (
-    <div className="flex flex-1 flex-col items-center bg-zinc-50 font-sans dark:bg-black">
+    <div className="flex flex-1 flex-col items-center font-sans">
       <main className="flex w-full max-w-5xl flex-1 flex-col gap-6 px-6 py-16 sm:px-10">
         <header className="flex items-end justify-between gap-4">
           <div className="flex flex-col gap-2">
@@ -273,85 +284,7 @@ export default async function LibraryPage({
             )}
           </div>
         ) : (
-          <ul className="grid grid-cols-2 gap-4 sm:grid-cols-3 md:grid-cols-4">
-            {items.map((a) => (
-              <li
-                key={a.id}
-                className="flex flex-col overflow-hidden rounded-lg border border-zinc-200 bg-white dark:border-zinc-800 dark:bg-zinc-950"
-              >
-                <div className="relative aspect-square bg-zinc-100 dark:bg-zinc-900">
-                  {a.url ? (
-                    // eslint-disable-next-line @next/next/no-img-element
-                    <img
-                      src={a.url}
-                      alt={a.title ?? "Uploaded image"}
-                      className="h-full w-full object-cover"
-                    />
-                  ) : (
-                    <div className="flex h-full items-center justify-center text-xs text-zinc-400">
-                      no preview
-                    </div>
-                  )}
-                  {a.similarity !== null && (
-                    <span className="absolute right-1.5 top-1.5 rounded-full bg-black/70 px-2 py-0.5 text-[10px] font-medium text-white">
-                      {Math.round(a.similarity * 100)}% match
-                    </span>
-                  )}
-                </div>
-                <div className="flex flex-col gap-1 px-2.5 py-2">
-                  <div className="flex items-center justify-between gap-1">
-                    <form
-                      action={updateAsset}
-                      className="flex min-w-0 flex-1 items-center gap-1"
-                    >
-                      <input type="hidden" name="id" value={a.id} />
-                      <input
-                        key={a.title ?? ""}
-                        name="title"
-                        defaultValue={a.title ?? ""}
-                        placeholder="Untitled"
-                        aria-label="Image title"
-                        className="min-w-0 flex-1 rounded border border-transparent bg-transparent px-1 py-0.5 text-xs font-medium text-zinc-800 hover:border-zinc-200 focus:border-zinc-400 focus:outline-none dark:text-zinc-200 dark:hover:border-zinc-800 dark:focus:border-zinc-600"
-                      />
-                      <button
-                        type="submit"
-                        className="shrink-0 rounded-full border border-zinc-200 px-2 py-0.5 text-[10px] font-medium text-zinc-600 hover:bg-zinc-100 dark:border-zinc-800 dark:text-zinc-400 dark:hover:bg-zinc-800"
-                      >
-                        Save
-                      </button>
-                    </form>
-                    {a.status && (
-                      <span
-                        className={`shrink-0 rounded-full px-2 py-0.5 text-[10px] font-medium ${
-                          STATUS_STYLES[a.status] ?? STATUS_STYLES.uploaded
-                        }`}
-                      >
-                        {a.status}
-                      </span>
-                    )}
-                  </div>
-                  <div className="flex items-center justify-between gap-2">
-                    {a.tags.length > 0 ? (
-                      <span className="truncate text-[11px] text-zinc-500">
-                        {a.tags.slice(0, 4).join(" · ")}
-                      </span>
-                    ) : (
-                      <span />
-                    )}
-                    <form action={deleteAsset}>
-                      <input type="hidden" name="id" value={a.id} />
-                      <button
-                        type="submit"
-                        className="shrink-0 text-[10px] font-medium text-red-500 hover:text-red-700 dark:hover:text-red-400"
-                      >
-                        Delete
-                      </button>
-                    </form>
-                  </div>
-                </div>
-              </li>
-            ))}
-          </ul>
+          <LibraryGrid items={items} />
         )}
       </main>
     </div>

@@ -97,6 +97,70 @@ export async function analyzePendingAssets() {
   redirect(`/library?notice=${encodeURIComponent(message)}`);
 }
 
+/** Rename a library image (the auto-generated title is editable per spec). */
+export async function renameAsset(assetId: string, formData: FormData) {
+  const title = String(formData.get("title") ?? "").trim();
+  if (!title) return;
+
+  const ctx = await getProfile();
+  if (!ctx) redirect("/login");
+
+  const supabase = await createClient();
+  const { error } = await supabase
+    .from("assets")
+    .update({ title })
+    .eq("id", assetId);
+  if (error) throw new Error(error.message);
+
+  revalidatePath("/library");
+}
+
+/**
+ * Delete library images everywhere they're referenced: off project boards, out
+ * of slides/clips that used them as backgrounds (nulled, not deleted — the
+ * rendered output survives), then the rows, then the storage objects.
+ * References are cleared in code first so the delete works regardless of how
+ * the FKs' on-delete behavior is configured; rows go before storage so a
+ * failed cleanup leaves only orphaned objects, never dangling references.
+ */
+export async function deleteAssets(assetIds: string[]) {
+  if (assetIds.length === 0) return;
+
+  const ctx = await getProfile();
+  if (!ctx) redirect("/login");
+
+  const supabase = await createClient();
+  const { data: assets } = await supabase
+    .from("assets")
+    .select("storage_path")
+    .in("id", assetIds);
+  if (!assets || assets.length === 0) return;
+
+  const cleared = await Promise.all([
+    supabase.from("project_assets").delete().in("asset_id", assetIds),
+    supabase.from("slides").update({ asset_id: null }).in("asset_id", assetIds),
+    supabase
+      .from("video_clips")
+      .update({ asset_id: null })
+      .in("asset_id", assetIds),
+  ]);
+  const clearError = cleared.find((r) => r.error)?.error;
+  if (clearError) throw new Error(clearError.message);
+
+  const { error } = await supabase.from("assets").delete().in("id", assetIds);
+  if (error) throw new Error(error.message);
+  await supabase.storage
+    .from("assets")
+    .remove(assets.map((a) => a.storage_path));
+
+  revalidatePath("/library");
+}
+
+/** Delete a single library image (the card's Delete button). */
+export async function deleteAsset(assetId: string) {
+  await deleteAssets([assetId]);
+}
+
 /**
  * Recovery for assets stranded at `analyzing` by a crashed workflow run (the
  * n8n flow marks an asset `analyzing`, then dies on the Gemini call and never
@@ -119,51 +183,4 @@ export async function resetStuckAssets() {
     ? `Could not reset stuck images: ${error.message}`
     : `Reset ${data?.length ?? 0} stuck image${(data?.length ?? 0) === 1 ? "" : "s"} back to the queue.`;
   redirect(`/library?notice=${encodeURIComponent(message)}`);
-}
-
-/** Rename a library image inline from its card. */
-export async function updateAsset(formData: FormData) {
-  const id = String(formData.get("id") ?? "").trim();
-  if (!id) return;
-  const title = String(formData.get("title") ?? "").trim();
-
-  const ctx = await getProfile();
-  if (!ctx) redirect("/login");
-
-  const supabase = await createClient();
-  const { error } = await supabase
-    .from("assets")
-    .update({ title: title || null })
-    .eq("id", id);
-  if (error) throw new Error(error.message);
-
-  revalidatePath("/library");
-}
-
-/**
- * Delete a library image. The row goes first (board rows cascade away;
- * slides/video clips keep their copy but lose the background reference),
- * then the storage object — a failed cleanup leaves only an orphaned file,
- * never a listed image whose file is gone.
- */
-export async function deleteAsset(formData: FormData) {
-  const id = String(formData.get("id") ?? "").trim();
-  if (!id) return;
-
-  const ctx = await getProfile();
-  if (!ctx) redirect("/login");
-
-  const supabase = await createClient();
-  const { data: row } = await supabase
-    .from("assets")
-    .select("storage_path")
-    .eq("id", id)
-    .single();
-  if (!row) return;
-
-  const { error } = await supabase.from("assets").delete().eq("id", id);
-  if (error) throw new Error(error.message);
-  await supabase.storage.from("assets").remove([row.storage_path]);
-
-  revalidatePath("/library");
 }

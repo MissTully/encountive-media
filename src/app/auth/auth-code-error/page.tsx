@@ -2,7 +2,7 @@ import Link from "next/link";
 
 export default function AuthCodeErrorPage() {
   return (
-    <div className="flex flex-1 flex-col items-center justify-center gap-4 bg-zinc-50 px-6 text-center font-sans dark:bg-black">
+    <div className="flex flex-1 flex-col items-center justify-center gap-4 px-6 text-center font-sans">
       <h1 className="text-2xl font-semibold text-zinc-900 dark:text-zinc-50">
         Sign-in failed
       </h1>
