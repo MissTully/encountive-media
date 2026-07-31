@@ -78,6 +78,16 @@ const TOOLS = [
     detail: "Drop in new visuals — titled and tagged automatically.",
     href: "/upload",
   },
+  {
+    title: "Video Clips",
+    detail: "B-roll and product footage, ready to drop into timelines.",
+    href: "/clips",
+  },
+  {
+    title: "Connections",
+    detail: "Publish carousels and videos straight to your social accounts.",
+    href: "/connections",
+  },
 ];
 
 export default async function Home() {

@@ -147,15 +147,32 @@ export interface Video {
   created_at: string;
 }
 
-/** One clip in a video — a library image held on screen for a few seconds. */
+/** One clip in a video — an image or a video-clip asset held on screen. */
 export interface VideoClip {
   id: UUID;
   video_id: UUID;
   position: number;
-  asset_id: UUID | null;
+  asset_id: UUID | null; // a still image from the image library…
+  video_asset_id: UUID | null; // …or a clip from the video-clip library
   headline: string | null; // overlaid at the render layer, never baked in
   body_copy: string | null;
   duration_seconds: number;
+  created_at: string;
+}
+
+/** The video-clip library — uploaded video files (b-roll, product clips). */
+export interface VideoAsset {
+  id: UUID;
+  org_id: UUID;
+  storage_path: string; // path in the `clips` storage bucket
+  title: string | null;
+  tags: string[];
+  source: AssetSource;
+  status: AssetStatus;
+  mime_type: string | null;
+  duration_seconds: number | null;
+  width: number | null;
+  height: number | null;
   created_at: string;
 }
 
@@ -180,10 +197,11 @@ export interface SocialAccount {
 /** Lifecycle of one publish attempt. */
 export type PublicationStatus = "publishing" | "published" | "failed";
 
-/** One attempt to post an approved carousel to one social account. */
+/** One attempt to post an approved carousel or a rendered video. */
 export interface Publication {
   id: UUID;
-  request_id: UUID;
+  request_id: UUID | null; // set when publishing a carousel…
+  video_id: UUID | null; // …or a rendered video
   social_account_id: UUID;
   caption: string;
   status: PublicationStatus;

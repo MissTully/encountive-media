@@ -7,7 +7,13 @@
 // carousel container. The same submit → poll → finish shape as every other
 // async job in this codebase.
 
-import { apiCall, sleep, type PublishInput, type PublishResult } from "./shared";
+import {
+  apiCall,
+  sleep,
+  type PublishInput,
+  type PublishVideoInput,
+  type PublishResult,
+} from "./shared";
 
 const GRAPH = "https://graph.facebook.com/v23.0";
 const MAX_CAROUSEL_ITEMS = 10;
@@ -28,8 +34,12 @@ async function createContainer(
 }
 
 /** Instagram processes containers asynchronously; publish only when FINISHED. */
-async function waitForContainer(containerId: string, token: string) {
-  const deadline = Date.now() + 120_000;
+async function waitForContainer(
+  containerId: string,
+  token: string,
+  timeoutMs = 120_000,
+) {
+  const deadline = Date.now() + timeoutMs;
   for (;;) {
     const { status_code } = await apiCall<{ status_code: string }>(
       `${GRAPH}/${containerId}?fields=status_code&access_token=${encodeURIComponent(token)}`,
@@ -38,10 +48,10 @@ async function waitForContainer(containerId: string, token: string) {
     );
     if (status_code === "FINISHED") return;
     if (status_code === "ERROR" || status_code === "EXPIRED") {
-      throw new Error(`Instagram could not process an image (${status_code})`);
+      throw new Error(`Instagram could not process the media (${status_code})`);
     }
     if (Date.now() > deadline) {
-      throw new Error("Instagram image processing timed out");
+      throw new Error("Instagram media processing timed out");
     }
     await sleep(2500);
   }
@@ -93,6 +103,45 @@ export async function publishToInstagram(
 
   // Permalink is a separate lookup; a published post without one is still a
   // success, so don't fail the whole publication over it.
+  let postUrl: string | null = null;
+  try {
+    const { permalink } = await apiCall<{ permalink?: string }>(
+      `${GRAPH}/${mediaId}?fields=permalink&access_token=${encodeURIComponent(token)}`,
+      { method: "GET" },
+      "Instagram permalink",
+    );
+    postUrl = permalink ?? null;
+  } catch {
+    // best effort only
+  }
+  return { postRef: mediaId, postUrl };
+}
+
+/**
+ * Publish a single video as a Reel. Same container flow as images, but video
+ * processing takes longer, so the wait uses a larger deadline.
+ */
+export async function publishVideoToInstagram(
+  input: PublishVideoInput,
+): Promise<PublishResult> {
+  const { accountRef: igUserId, accessToken: token } = input;
+
+  const containerId = await createContainer(igUserId, token, {
+    media_type: "REELS",
+    video_url: input.videoUrl,
+    caption: input.caption,
+  });
+  await waitForContainer(containerId, token, 240_000);
+
+  const { id: mediaId } = await apiCall<{ id: string }>(
+    `${GRAPH}/${igUserId}/media_publish`,
+    {
+      method: "POST",
+      body: new URLSearchParams({ creation_id: containerId, access_token: token }),
+    },
+    "Instagram publish",
+  );
+
   let postUrl: string | null = null;
   try {
     const { permalink } = await apiCall<{ permalink?: string }>(

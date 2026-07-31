@@ -146,6 +146,7 @@ export default async function MusicLibraryPage({
                     >
                       <input type="hidden" name="id" value={t.id} />
                       <input
+                        key={t.title ?? ""}
                         name="title"
                         defaultValue={t.title ?? ""}
                         placeholder="Untitled"
@@ -153,6 +154,7 @@ export default async function MusicLibraryPage({
                         className="min-w-0 flex-1 rounded-md border border-transparent bg-transparent px-1 py-0.5 text-sm font-medium text-zinc-900 hover:border-zinc-200 focus:border-zinc-400 focus:outline-none dark:text-zinc-100 dark:hover:border-zinc-800 dark:focus:border-zinc-600"
                       />
                       <input
+                        key={t.artist ?? ""}
                         name="artist"
                         defaultValue={t.artist ?? ""}
                         placeholder="Artist"

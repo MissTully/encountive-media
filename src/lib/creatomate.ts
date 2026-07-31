@@ -21,18 +21,22 @@ export function slideElements(spec: {
   bodyCopy: string | null;
   /** canvasWidth / 1080 — scales the caption sizes to the output canvas. */
   fontScale?: number;
+  /** "video" renders the source as a muted video clip; default is image. */
+  mediaType?: "image" | "video";
 }): Array<Record<string, unknown>> {
   const fontScale = spec.fontScale ?? 1;
   const hasText = Boolean(spec.headline || spec.bodyCopy);
   const elements: Array<Record<string, unknown>> = [
     {
-      type: "image",
+      type: spec.mediaType === "video" ? "video" : "image",
       source: spec.imageUrl,
       x: "50%",
       y: "50%",
       width: "100%",
       height: "100%",
       fit: "cover",
+      // Clip audio is muted — the soundtrack lives on its own track.
+      ...(spec.mediaType === "video" ? { volume: "0%" } : {}),
       ...(hasText ? { color_overlay: "rgba(0,0,0,0.45)" } : {}),
     },
   ];
@@ -43,6 +47,11 @@ export function slideElements(spec: {
       x: "50%",
       y: "42%",
       width: "84%",
+      // Anchor the element's BOTTOM edge at 42% so multi-line headlines grow
+      // upward. Without y_anchor Creatomate centers the box on y, and long
+      // copy overlaps the body text below (y_alignment only aligns text
+      // inside the box — it does not anchor the box itself).
+      y_anchor: "100%",
       x_alignment: "50%",
       y_alignment: "100%",
       font_family: "Inter",
@@ -58,6 +67,9 @@ export function slideElements(spec: {
       x: "50%",
       y: "48%",
       width: "78%",
+      // Anchor the element's TOP edge at 48% so long body copy grows
+      // downward, mirroring the in-app preview's layout exactly.
+      y_anchor: "0%",
       x_alignment: "50%",
       y_alignment: "0%",
       font_family: "Inter",

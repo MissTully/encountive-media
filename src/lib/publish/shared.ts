@@ -36,3 +36,12 @@ export async function apiCall<T>(
 export function sleep(ms: number): Promise<void> {
   return new Promise((r) => setTimeout(r, ms));
 }
+
+export interface PublishVideoInput {
+  /** Publicly fetchable URL for the rendered MP4. */
+  videoUrl: string;
+  caption: string;
+  /** Platform-side identity to post as (IG user id / Page id / author URN). */
+  accountRef: string;
+  accessToken: string;
+}

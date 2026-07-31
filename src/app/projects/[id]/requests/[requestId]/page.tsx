@@ -502,7 +502,11 @@ export default async function RequestDetailPage({
               >
                 Soundtrack
               </label>
+              {/* key: React resets uncontrolled fields to their rendered
+                  defaultValue after a form action — keying by the saved value
+                  re-syncs the select to the fresh server state. */}
               <select
+                key={carousel.audio_asset_id ?? "none"}
                 id="audio_asset_id"
                 name="audio_asset_id"
                 defaultValue={carousel.audio_asset_id ?? ""}
