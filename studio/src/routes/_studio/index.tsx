@@ -62,13 +62,14 @@ function StudioHome() {
               </Button>
             </div>
           </div>
-          <div className="relative min-h-48 border-t border-border lg:border-l lg:border-t-0">
+          <div className="relative min-h-56 overflow-hidden border-t border-border lg:min-h-full lg:border-l lg:border-t-0">
             <img
-              src="/stills/sim-lab-wide.jpg"
-              alt=""
-              className="absolute inset-0 size-full object-cover"
+              src="/stills/hero-mark.jpg"
+              alt="Encountive mark as contemporary art — two figures in navy and teal"
+              className="absolute inset-0 size-full object-cover object-center"
             />
-            <div className="absolute inset-0 bg-gradient-to-l from-transparent to-surface/40" />
+            <div className="absolute inset-0 bg-gradient-to-l from-transparent via-transparent to-surface/25" />
+            <div className="pointer-events-none absolute inset-0 ring-1 ring-inset ring-accent/20" />
           </div>
         </div>
       </section>
