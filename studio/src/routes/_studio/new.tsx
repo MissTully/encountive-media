@@ -64,55 +64,60 @@ function NewCampaign() {
       return;
     }
     setBusy(true);
-    const res = await writeCampaign({
-      data: { brief: brief.trim(), audience, channel, goal },
-    });
-    setBusy(false);
-    if (!res.ok) {
-      toast.error(res.error);
-      return;
+    try {
+      const res = await writeCampaign({
+        data: { brief: brief.trim(), audience, channel, goal },
+      });
+      if (!res.ok) {
+        toast.error(res.error);
+        return;
+      }
+      const used = new Set<string>();
+      const slides: Slide[] = res.deck.slides.map((s, i) => ({
+        id: uid("s"),
+        kicker: s.kicker,
+        headline: s.headline,
+        body: s.body,
+        layout: (["cover", "photo", "stat", "quote", "close"].includes(s.layout)
+          ? s.layout
+          : i === 0
+            ? "cover"
+            : "photo") as SlideLayout,
+        visualPrompt: s.visualPrompt,
+        imageUrl: pickStill(s.visualPrompt, i, used),
+        statValue: s.statValue,
+        statLabel: s.statLabel,
+      }));
+      const campaign: Campaign = {
+        id: uid("cmp"),
+        title: res.deck.title,
+        brief: brief.trim(),
+        audience,
+        channel,
+        cta: res.deck.cta,
+        caption: res.deck.caption,
+        slides,
+        status: "draft",
+        notes: "",
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+        motion: {
+          id: uid("mot"),
+          prompt: res.deck.motionPrompt,
+          status: "idle",
+          duration: 6,
+          aspectRatio: channel === "stories" ? "9:16" : channel === "youtube" ? "16:9" : "1:1",
+          posterUrl: slides[0]?.imageUrl,
+        },
+      };
+      upsert(campaign);
+      toast.success("Deck drafted. Stills pulled from the library — generate originals per slide if you want.");
+      navigate({ to: "/campaigns/$id", params: { id: campaign.id } });
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Copy failed");
+    } finally {
+      setBusy(false);
     }
-    const used = new Set<string>();
-    const slides: Slide[] = res.deck.slides.map((s, i) => ({
-      id: uid("s"),
-      kicker: s.kicker,
-      headline: s.headline,
-      body: s.body,
-      layout: (["cover", "photo", "stat", "quote", "close"].includes(s.layout)
-        ? s.layout
-        : i === 0
-          ? "cover"
-          : "photo") as SlideLayout,
-      visualPrompt: s.visualPrompt,
-      imageUrl: pickStill(s.visualPrompt, i, used),
-      statValue: s.statValue,
-      statLabel: s.statLabel,
-    }));
-    const campaign: Campaign = {
-      id: uid("cmp"),
-      title: res.deck.title,
-      brief: brief.trim(),
-      audience,
-      channel,
-      cta: res.deck.cta,
-      caption: res.deck.caption,
-      slides,
-      status: "draft",
-      notes: "",
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString(),
-      motion: {
-        id: uid("mot"),
-        prompt: res.deck.motionPrompt,
-        status: "idle",
-        duration: 6,
-        aspectRatio: channel === "stories" ? "9:16" : channel === "youtube" ? "16:9" : "1:1",
-        posterUrl: slides[0]?.imageUrl,
-      },
-    };
-    upsert(campaign);
-    toast.success("Deck drafted. Stills pulled from the library — generate originals per slide if you want.");
-    navigate({ to: "/campaigns/$id", params: { id: campaign.id } });
   }
 
   return (

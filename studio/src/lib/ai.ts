@@ -1,5 +1,4 @@
 import { createServerFn } from "@tanstack/react-start";
-import { authMiddleware } from "@/lib/auth/middleware";
 import { BRAND } from "./brand";
 import type { Audience, Channel, SlideLayout } from "./types";
 
@@ -22,6 +21,11 @@ Never say:
 Write like a clinical educator who also understands LinkedIn. Short sentences. Concrete nouns. No hype adjectives (revolutionary, magical, seamless, unlock, supercharge). No emoji.
 
 Return ONLY valid JSON.`;
+
+const IMAGE_MODEL = "grok-imagine-image-2.0";
+const CHAT_TIMEOUT_MS = 45_000;
+const IMAGE_TIMEOUT_MS = 90_000;
+const VIDEO_TIMEOUT_MS = 30_000;
 
 export type GeneratedDeck = {
   title: string;
@@ -46,27 +50,88 @@ function extractJson(text: string): unknown {
   return JSON.parse(text.slice(start, end + 1));
 }
 
+function requireApiKey(): string {
+  const apiKey = process.env.XAI_API_KEY?.trim();
+  if (!apiKey) throw new Error("Grok and Imagine are not available in this environment.");
+  return apiKey;
+}
+
+async function xaiFetch(
+  path: string,
+  init: RequestInit,
+  timeoutMs: number,
+): Promise<Response> {
+  const apiKey = requireApiKey();
+  const ctrl = new AbortController();
+  const timer = setTimeout(() => ctrl.abort(), timeoutMs);
+  try {
+    return await fetch(`https://api.x.ai/v1${path}`, {
+      ...init,
+      signal: ctrl.signal,
+      headers: {
+        Authorization: `Bearer ${apiKey}`,
+        ...(init.body ? { "Content-Type": "application/json" } : {}),
+        ...(init.headers ?? {}),
+      },
+    });
+  } catch (e) {
+    if (e instanceof Error && e.name === "AbortError") {
+      throw new Error("That took too long. Try again.");
+    }
+    throw e;
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+async function toDataUrl(value: string): Promise<string> {
+  if (value.startsWith("data:")) return value;
+  const res = await fetch(value);
+  if (!res.ok) throw new Error("Could not read the generated image.");
+  const buf = Buffer.from(await res.arrayBuffer());
+  const mime = res.headers.get("content-type") || "image/png";
+  return `data:${mime};base64,${buf.toString("base64")}`;
+}
+
+async function imageFromBody(body: {
+  data?: { b64_json?: string; url?: string }[];
+}): Promise<string> {
+  const first = body.data?.[0];
+  if (first?.b64_json) return `data:image/png;base64,${first.b64_json}`;
+  if (first?.url) return toDataUrl(first.url);
+  throw new Error("Imagine returned no image.");
+}
+
+async function resolveImageInput(path: string): Promise<string> {
+  if (path.startsWith("data:")) return path;
+  if (path.startsWith("http")) return toDataUrl(path);
+  const { readFile } = await import("node:fs/promises");
+  const { join } = await import("node:path");
+  const file = join(process.cwd(), "public", path.replace(/^\//, ""));
+  const buf = await readFile(file);
+  const mime = file.endsWith(".png") ? "image/png" : "image/jpeg";
+  return `data:${mime};base64,${buf.toString("base64")}`;
+}
+
 async function grokJson(user: string): Promise<unknown> {
-  const apiKey = process.env.XAI_API_KEY;
-  if (!apiKey) throw new Error("AI is not available in this environment");
-  const res = await fetch("https://api.x.ai/v1/chat/completions", {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      Authorization: `Bearer ${apiKey}`,
+  const res = await xaiFetch(
+    "/chat/completions",
+    {
+      method: "POST",
+      body: JSON.stringify({
+        model: "grok-4.5",
+        temperature: 0.6,
+        messages: [
+          { role: "system", content: SYSTEM },
+          { role: "user", content: user },
+        ],
+      }),
     },
-    body: JSON.stringify({
-      model: "grok-4.5",
-      temperature: 0.6,
-      messages: [
-        { role: "system", content: SYSTEM },
-        { role: "user", content: user },
-      ],
-    }),
-  });
+    CHAT_TIMEOUT_MS,
+  );
   if (!res.ok) {
     const err = await res.text().catch(() => "");
-    throw new Error(`xAI chat error ${res.status}${err ? `: ${err.slice(0, 180)}` : ""}`);
+    throw new Error(`Copy error ${res.status}${err ? `: ${err.slice(0, 180)}` : ""}`);
   }
   const body = (await res.json()) as {
     choices: { message: { content: string } }[];
@@ -80,7 +145,6 @@ export const writeCampaign = createServerFn({ method: "POST" })
     (input: { brief: string; audience: Audience; channel: Channel; goal: string }) =>
       input,
   )
-  .middleware([authMiddleware])
   .handler(async ({ data }): Promise<{ ok: true; deck: GeneratedDeck } | { ok: false; error: string }> => {
     try {
       const slideCount =
@@ -130,7 +194,6 @@ export const rewriteSlide = createServerFn({ method: "POST" })
       layout: SlideLayout;
     }) => input,
   )
-  .middleware([authMiddleware])
   .handler(async ({ data }): Promise<{ ok: true; kicker: string; headline: string; body: string } | { ok: false; error: string }> => {
     try {
       const raw = await grokJson(`Rewrite this carousel slide.
@@ -151,25 +214,22 @@ Keep headline ≤ 12 words. Do not invent stats.`);
 
 export const generateStill = createServerFn({ method: "POST" })
   .validator((input: { prompt: string; aspectRatio: string }) => input)
-  .middleware([authMiddleware])
   .handler(async ({ data }): Promise<{ ok: true; dataUrl: string } | { ok: false; error: string }> => {
-    const apiKey = process.env.XAI_API_KEY;
-    if (!apiKey) return { ok: false, error: "AI is not available in this environment" };
     try {
-      const res = await fetch("https://api.x.ai/v1/images/generations", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${apiKey}`,
+      const res = await xaiFetch(
+        "/images/generations",
+        {
+          method: "POST",
+          body: JSON.stringify({
+            model: IMAGE_MODEL,
+            prompt: `${data.prompt}. Photoreal cinematic healthcare photography, navy and tidal-teal color grade, no text, no logos, no watermarks, no lettering, no UI words.`,
+            aspect_ratio: data.aspectRatio,
+            resolution: "1k",
+            n: 1,
+          }),
         },
-        body: JSON.stringify({
-          model: "grok-imagine-image-2.0",
-          prompt: `${data.prompt}. Photoreal cinematic healthcare photography, navy and tidal-teal color grade, no text, no logos, no watermarks, no lettering, no UI words.`,
-          aspect_ratio: data.aspectRatio,
-          resolution: "1k",
-          response_format: "b64_json",
-        }),
-      });
+        IMAGE_TIMEOUT_MS,
+      );
       if (!res.ok) {
         const err = await res.text().catch(() => "");
         return { ok: false, error: `Imagine image error ${res.status}: ${err.slice(0, 180)}` };
@@ -177,14 +237,43 @@ export const generateStill = createServerFn({ method: "POST" })
       const body = (await res.json()) as {
         data?: { b64_json?: string; url?: string }[];
       };
-      const first = body.data?.[0];
-      if (first?.b64_json) {
-        return { ok: true, dataUrl: `data:image/png;base64,${first.b64_json}` };
-      }
-      if (first?.url) return { ok: true, dataUrl: first.url };
-      return { ok: false, error: "Imagine returned no image" };
+      return { ok: true, dataUrl: await imageFromBody(body) };
     } catch (e) {
       return { ok: false, error: e instanceof Error ? e.message : "Image failed" };
+    }
+  });
+
+export const editStill = createServerFn({ method: "POST" })
+  .validator(
+    (input: { prompt: string; imageUrl: string; aspectRatio: string }) => input,
+  )
+  .handler(async ({ data }): Promise<{ ok: true; dataUrl: string } | { ok: false; error: string }> => {
+    try {
+      const source = await resolveImageInput(data.imageUrl);
+      const res = await xaiFetch(
+        "/images/edits",
+        {
+          method: "POST",
+          body: JSON.stringify({
+            model: IMAGE_MODEL,
+            prompt: `${data.prompt}. Keep photoreal healthcare photography, navy and tidal-teal grade. No text, no logos, no lettering, no watermarks.`,
+            image: { url: source, type: "image_url" },
+            aspect_ratio: data.aspectRatio,
+            n: 1,
+          }),
+        },
+        IMAGE_TIMEOUT_MS,
+      );
+      if (!res.ok) {
+        const err = await res.text().catch(() => "");
+        return { ok: false, error: `Imagine edit error ${res.status}: ${err.slice(0, 220)}` };
+      }
+      const body = (await res.json()) as {
+        data?: { b64_json?: string; url?: string }[];
+      };
+      return { ok: true, dataUrl: await imageFromBody(body) };
+    } catch (e) {
+      return { ok: false, error: e instanceof Error ? e.message : "Edit failed" };
     }
   });
 
@@ -197,10 +286,7 @@ export const startMotion = createServerFn({ method: "POST" })
       aspectRatio: "16:9" | "9:16" | "1:1";
     }) => input,
   )
-  .middleware([authMiddleware])
   .handler(async ({ data }): Promise<{ ok: true; requestId: string } | { ok: false; error: string }> => {
-    const apiKey = process.env.XAI_API_KEY;
-    if (!apiKey) return { ok: false, error: "AI is not available in this environment" };
     try {
       const payload: Record<string, unknown> = {
         model: "grok-imagine-video-1.5",
@@ -212,14 +298,11 @@ export const startMotion = createServerFn({ method: "POST" })
       if (data.imageDataUrl) {
         payload.image = { url: data.imageDataUrl, type: "image_url" };
       }
-      const res = await fetch("https://api.x.ai/v1/videos/generations", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${apiKey}`,
-        },
-        body: JSON.stringify(payload),
-      });
+      const res = await xaiFetch(
+        "/videos/generations",
+        { method: "POST", body: JSON.stringify(payload) },
+        VIDEO_TIMEOUT_MS,
+      );
       if (!res.ok) {
         const err = await res.text().catch(() => "");
         return { ok: false, error: `Imagine video error ${res.status}: ${err.slice(0, 220)}` };
@@ -234,17 +317,16 @@ export const startMotion = createServerFn({ method: "POST" })
 
 export const pollMotion = createServerFn({ method: "POST" })
   .validator((input: { requestId: string }) => input)
-  .middleware([authMiddleware])
   .handler(async ({ data }): Promise<
     | { ok: true; status: "pending" | "done" | "failed" | "expired"; url?: string; error?: string }
     | { ok: false; error: string }
   > => {
-    const apiKey = process.env.XAI_API_KEY;
-    if (!apiKey) return { ok: false, error: "AI is not available in this environment" };
     try {
-      const res = await fetch(`https://api.x.ai/v1/videos/${data.requestId}`, {
-        headers: { Authorization: `Bearer ${apiKey}` },
-      });
+      const res = await xaiFetch(
+        `/videos/${data.requestId}`,
+        { method: "GET" },
+        VIDEO_TIMEOUT_MS,
+      );
       if (!res.ok) {
         const err = await res.text().catch(() => "");
         return { ok: false, error: `Poll error ${res.status}: ${err.slice(0, 180)}` };
@@ -269,31 +351,9 @@ export const pollMotion = createServerFn({ method: "POST" })
 
 export const fetchPublicAsDataUrl = createServerFn({ method: "POST" })
   .validator((input: { path: string }) => input)
-  .middleware([authMiddleware])
   .handler(async ({ data }): Promise<{ ok: true; dataUrl: string } | { ok: false; error: string }> => {
     try {
-      if (data.path.startsWith("data:")) return { ok: true, dataUrl: data.path };
-      if (data.path.startsWith("http")) {
-        const res = await fetch(data.path);
-        if (!res.ok) return { ok: false, error: "Could not fetch source still" };
-        const buf = Buffer.from(await res.arrayBuffer());
-        const mime = res.headers.get("content-type") ?? "image/jpeg";
-        return { ok: true, dataUrl: `data:${mime};base64,${buf.toString("base64")}` };
-      }
-      const { readFile } = await import("node:fs/promises");
-      const { join } = await import("node:path");
-      const file = join(process.cwd(), "public", data.path.replace(/^\//, ""));
-      const buf = await readFile(file);
-      const mime = file.endsWith(".png")
-        ? "image/png"
-        : file.endsWith(".mp4")
-          ? "video/mp4"
-          : file.endsWith(".mp3")
-            ? "audio/mpeg"
-            : file.endsWith(".wav")
-              ? "audio/wav"
-              : "image/jpeg";
-      return { ok: true, dataUrl: `data:${mime};base64,${buf.toString("base64")}` };
+      return { ok: true, dataUrl: await resolveImageInput(data.path) };
     } catch {
       return { ok: false, error: "Could not read source still" };
     }
@@ -301,7 +361,6 @@ export const fetchPublicAsDataUrl = createServerFn({ method: "POST" })
 
 export const writeVoiceover = createServerFn({ method: "POST" })
   .validator((input: { caption: string; title: string; seconds: number }) => input)
-  .middleware([authMiddleware])
   .handler(async ({ data }): Promise<{ ok: true; script: string } | { ok: false; error: string }> => {
     try {
       const raw = await grokJson(`Write a ${data.seconds}-second voiceover for this Encountive campaign.
@@ -321,25 +380,22 @@ The script must be speakable in about ${data.seconds} seconds (roughly ${Math.ro
 
 export const synthesizeNarration = createServerFn({ method: "POST" })
   .validator((input: { text: string; voiceId: string }) => input)
-  .middleware([authMiddleware])
   .handler(async ({ data }): Promise<{ ok: true; dataUrl: string } | { ok: false; error: string }> => {
-    const apiKey = process.env.XAI_API_KEY;
-    if (!apiKey) return { ok: false, error: "AI is not available in this environment" };
-    const text = data.text.trim().slice(0, 1200);
-    if (!text) return { ok: false, error: "Write narration first." };
     try {
-      const res = await fetch("https://api.x.ai/v1/tts", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${apiKey}`,
+      const text = data.text.trim().slice(0, 1200);
+      if (!text) return { ok: false, error: "Write narration first." };
+      const res = await xaiFetch(
+        "/tts",
+        {
+          method: "POST",
+          body: JSON.stringify({
+            text,
+            voice_id: data.voiceId || "eve",
+            language: "en",
+          }),
         },
-        body: JSON.stringify({
-          text,
-          voice_id: data.voiceId || "eve",
-          language: "en",
-        }),
-      });
+        CHAT_TIMEOUT_MS,
+      );
       if (!res.ok) {
         const err = await res.text().catch(() => "");
         return { ok: false, error: `Voice error ${res.status}: ${err.slice(0, 180)}` };

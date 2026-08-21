@@ -10,6 +10,7 @@ import {
   Loader2,
   PenLine,
   RefreshCw,
+  Wand2,
 } from "lucide-react";
 import { toast } from "sonner";
 import { AudioMixer } from "@/components/audio-mixer";
@@ -27,6 +28,7 @@ import {
 } from "@/components/ui/dialog";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
+  editStill,
   fetchPublicAsDataUrl,
   generateStill,
   pollMotion,
@@ -42,6 +44,12 @@ export const Route = createFileRoute("/_studio/campaigns/$id")({
   component: CampaignWorkspace,
 });
 
+function failMessage(e: unknown): string {
+  const msg = e instanceof Error ? e.message : String(e);
+  if (/unauthorized/i.test(msg)) return "Sign in to run Grok and Imagine.";
+  return msg || "That request failed.";
+}
+
 function CampaignWorkspace() {
   const { id } = Route.useParams();
   const hydrated = useHydrated();
@@ -55,8 +63,11 @@ function CampaignWorkspace() {
   const [active, setActive] = useState(0);
   const [rewriteOpen, setRewriteOpen] = useState(false);
   const [rewriteNote, setRewriteNote] = useState("Tighter. Fewer words.");
+  const [editOpen, setEditOpen] = useState(false);
+  const [editNote, setEditNote] = useState("Warmer light. Keep faces. No text.");
   const [busyStill, setBusyStill] = useState(false);
   const [busyCopy, setBusyCopy] = useState(false);
+  const [busyEdit, setBusyEdit] = useState(false);
   const [busyMotion, setBusyMotion] = useState(false);
   const [notesOpen, setNotesOpen] = useState(false);
   const [notes, setNotes] = useState("");
@@ -71,39 +82,45 @@ function CampaignWorkspace() {
     if (!campaign || campaign.motion?.status !== "rendering" || !requestId) return;
     let cancelled = false;
     const tick = async () => {
-      const res = await pollMotion({ data: { requestId } });
-      if (cancelled || !res.ok) return;
-      if (res.status === "done" && res.url) {
-        setMotion(campaign.id, {
-          ...campaign.motion!,
-          status: "ready",
-          videoUrl: res.url,
-          originalUrl: res.url,
-        });
-        addAsset({
-          id: uid("ast"),
-          title: `${campaign.title} — motion`,
-          kind: "motion",
-          url: res.url,
-          posterUrl: campaign.slides[0]?.imageUrl,
-          tags: ["motion", "generated"],
-          prompt: campaign.motion?.prompt,
-        });
-        toast.success("Motion is ready.");
+      try {
+        const res = await pollMotion({ data: { requestId } });
+        if (cancelled || !res.ok) return;
+        if (res.status === "done" && res.url) {
+          setMotion(campaign.id, {
+            ...campaign.motion!,
+            status: "ready",
+            videoUrl: res.url,
+            originalUrl: res.url,
+          });
+          addAsset({
+            id: uid("ast"),
+            title: `${campaign.title} — motion`,
+            kind: "motion",
+            url: res.url,
+            posterUrl: campaign.slides[0]?.imageUrl,
+            tags: ["motion", "generated"],
+            prompt: campaign.motion?.prompt,
+          });
+          toast.success("Motion is ready.");
+          setBusyMotion(false);
+          return;
+        }
+        if (res.status === "failed" || res.status === "expired") {
+          setMotion(campaign.id, {
+            ...campaign.motion!,
+            status: "failed",
+            error: res.error,
+          });
+          toast.error(res.error ?? "Motion failed");
+          setBusyMotion(false);
+          return;
+        }
+        window.setTimeout(tick, 4000);
+      } catch (e) {
+        if (cancelled) return;
+        toast.error(failMessage(e));
         setBusyMotion(false);
-        return;
       }
-      if (res.status === "failed" || res.status === "expired") {
-        setMotion(campaign.id, {
-          ...campaign.motion!,
-          status: "failed",
-          error: res.error,
-        });
-        toast.error(res.error ?? "Motion failed");
-        setBusyMotion(false);
-        return;
-      }
-      window.setTimeout(tick, 4000);
     };
     tick();
     return () => {
@@ -130,6 +147,12 @@ function CampaignWorkspace() {
   const audience = AUDIENCES.find((a) => a.id === campaign.audience)?.label;
   const channel = CHANNELS.find((c) => c.id === campaign.channel)?.label;
   const current = campaign;
+  const aspect =
+    current.channel === "stories"
+      ? "9:16"
+      : current.channel === "youtube"
+        ? "16:9"
+        : "1:1";
 
   async function exportPng() {
     if (!canvasRef.current) return;
@@ -150,100 +173,134 @@ function CampaignWorkspace() {
   async function onRewrite() {
     if (!slide) return;
     setBusyCopy(true);
-    const res = await rewriteSlide({
-      data: {
-        instruction: rewriteNote,
-        kicker: slide.kicker,
-        headline: slide.headline,
-        body: slide.body,
-        layout: slide.layout,
-      },
-    });
-    setBusyCopy(false);
-    setRewriteOpen(false);
-    if (!res.ok) {
-      toast.error(res.error);
-      return;
+    try {
+      const res = await rewriteSlide({
+        data: {
+          instruction: rewriteNote,
+          kicker: slide.kicker,
+          headline: slide.headline,
+          body: slide.body,
+          layout: slide.layout,
+        },
+      });
+      if (!res.ok) {
+        toast.error(res.error);
+        return;
+      }
+      patchSlide(current.id, slide.id, {
+        kicker: res.kicker,
+        headline: res.headline,
+        body: res.body,
+      });
+      setRewriteOpen(false);
+      toast.success("Copy updated.");
+    } catch (e) {
+      toast.error(failMessage(e));
+    } finally {
+      setBusyCopy(false);
     }
-    patchSlide(current.id, slide.id, {
-      kicker: res.kicker,
-      headline: res.headline,
-      body: res.body,
-    });
-    toast.success("Copy updated.");
   }
 
   async function onStill() {
     if (!slide) return;
     setBusyStill(true);
-    const aspect =
-      current.channel === "stories"
-        ? "9:16"
-        : current.channel === "youtube"
-          ? "16:9"
-          : "1:1";
-    const res = await generateStill({
-      data: { prompt: slide.visualPrompt, aspectRatio: aspect },
-    });
-    setBusyStill(false);
-    if (!res.ok) {
-      toast.error(res.error);
-      return;
+    try {
+      const res = await generateStill({
+        data: { prompt: slide.visualPrompt, aspectRatio: aspect },
+      });
+      if (!res.ok) {
+        toast.error(res.error);
+        return;
+      }
+      patchSlide(current.id, slide.id, { imageUrl: res.dataUrl });
+      addAsset({
+        id: uid("ast"),
+        title: `${current.title} — slide ${active + 1}`,
+        kind: "still",
+        url: res.dataUrl,
+        tags: ["generated", current.audience],
+        prompt: slide.visualPrompt,
+      });
+      toast.success("New still from Imagine.");
+    } catch (e) {
+      toast.error(failMessage(e));
+    } finally {
+      setBusyStill(false);
     }
-    patchSlide(current.id, slide.id, { imageUrl: res.dataUrl });
-    addAsset({
-      id: uid("ast"),
-      title: `${current.title} — slide ${active + 1}`,
-      kind: "still",
-      url: res.dataUrl,
-      tags: ["generated", current.audience],
-      prompt: slide.visualPrompt,
-    });
-    toast.success("New still from Imagine.");
+  }
+
+  async function onEditStill() {
+    if (!slide) return;
+    setBusyEdit(true);
+    try {
+      const res = await editStill({
+        data: {
+          prompt: editNote,
+          imageUrl: slide.imageUrl,
+          aspectRatio: aspect,
+        },
+      });
+      if (!res.ok) {
+        toast.error(res.error);
+        return;
+      }
+      patchSlide(current.id, slide.id, { imageUrl: res.dataUrl });
+      addAsset({
+        id: uid("ast"),
+        title: `${current.title} — edited slide ${active + 1}`,
+        kind: "still",
+        url: res.dataUrl,
+        tags: ["edited", current.audience],
+        prompt: editNote,
+      });
+      setEditOpen(false);
+      toast.success("Still edited.");
+    } catch (e) {
+      toast.error(failMessage(e));
+    } finally {
+      setBusyEdit(false);
+    }
   }
 
   async function onMotion() {
     if (!slide) return;
     setBusyMotion(true);
-    const src = await fetchPublicAsDataUrl({ data: { path: slide.imageUrl } });
-    if (!src.ok) {
-      setBusyMotion(false);
-      toast.error(src.error);
-      return;
-    }
-    const aspect =
-      current.channel === "stories"
-        ? "9:16"
-        : current.channel === "youtube"
-          ? "16:9"
-          : "1:1";
-    const prompt =
-      current.motion?.prompt ||
-      "Slow cinematic push-in, natural light, photoreal, no text.";
-    const res = await startMotion({
-      data: {
+    try {
+      const src = await fetchPublicAsDataUrl({ data: { path: slide.imageUrl } });
+      if (!src.ok) {
+        toast.error(src.error);
+        return;
+      }
+      const prompt =
+        current.motion?.prompt ||
+        "Slow cinematic push-in, natural light, photoreal, no text.";
+      const res = await startMotion({
+        data: {
+          prompt,
+          imageDataUrl: src.dataUrl,
+          duration: 6,
+          aspectRatio: aspect,
+        },
+      });
+      if (!res.ok) {
+        toast.error(res.error);
+        return;
+      }
+      setMotion(current.id, {
+        id: current.motion?.id ?? uid("mot"),
         prompt,
-        imageDataUrl: src.dataUrl,
+        sourceSlideId: slide.id,
+        status: "rendering",
+        requestId: res.requestId,
         duration: 6,
         aspectRatio: aspect,
-      },
-    });
-    if (!res.ok) {
+        posterUrl: slide.imageUrl,
+      });
+      toast.message("Imagine is rendering motion. This takes a minute.");
+    } catch (e) {
+      toast.error(failMessage(e));
       setBusyMotion(false);
-      toast.error(res.error);
-      return;
     }
-    setMotion(current.id, {
-      id: current.motion?.id ?? uid("mot"),
-      prompt,
-      sourceSlideId: slide.id,
-      status: "rendering",
-      requestId: res.requestId,
-      duration: 6,
-      aspectRatio: aspect,
-      posterUrl: slide.imageUrl,
-    });
-    toast.message("Imagine is rendering motion. This takes a minute.");
   }
 
   return (
@@ -386,6 +443,18 @@ function CampaignWorkspace() {
                   </div>
                 </div>
               ) : null}
+              <div className="space-y-2">
+                <Label>Visual prompt</Label>
+                <Textarea
+                  rows={2}
+                  value={slide.visualPrompt}
+                  onChange={(e) =>
+                    patchSlide(campaign.id, slide.id, {
+                      visualPrompt: e.target.value,
+                    })
+                  }
+                />
+              </div>
               <div className="grid grid-cols-2 gap-2">
                 <Button
                   variant="secondary"
@@ -393,8 +462,25 @@ function CampaignWorkspace() {
                   disabled={busyCopy}
                   onClick={() => setRewriteOpen(true)}
                 >
-                  <PenLine className="size-3.5" />
-                  Rewrite
+                  {busyCopy ? (
+                    <Loader2 className="size-3.5 animate-spin" />
+                  ) : (
+                    <PenLine className="size-3.5" />
+                  )}
+                  Rewrite copy
+                </Button>
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  disabled={busyEdit}
+                  onClick={() => setEditOpen(true)}
+                >
+                  {busyEdit ? (
+                    <Loader2 className="size-3.5 animate-spin" />
+                  ) : (
+                    <Wand2 className="size-3.5" />
+                  )}
+                  Edit still
                 </Button>
                 <Button
                   variant="secondary"
@@ -503,7 +589,8 @@ function CampaignWorkspace() {
         <DialogContent>
           <DialogTitle>Rewrite this slide</DialogTitle>
           <DialogDescription>
-            Grok will keep Encountive voice and will not invent new statistics.
+            Grok keeps Encountive voice and will not invent new statistics. Type
+            in the fields at any time — this is only if you want a rewrite.
           </DialogDescription>
           <Textarea
             className="mt-4"
@@ -518,6 +605,32 @@ function CampaignWorkspace() {
             <Button disabled={busyCopy} onClick={onRewrite}>
               {busyCopy ? <Loader2 className="size-4 animate-spin" /> : <RefreshCw className="size-4" />}
               Rewrite
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={editOpen} onOpenChange={setEditOpen}>
+        <DialogContent>
+          <DialogTitle>Edit this still</DialogTitle>
+          <DialogDescription>
+            Imagine starts from the current photo and applies your instruction.
+            Type stays overlaid in Studio — never bake words into the picture.
+          </DialogDescription>
+          <Textarea
+            className="mt-4"
+            rows={3}
+            value={editNote}
+            onChange={(e) => setEditNote(e.target.value)}
+            placeholder="Closer crop. Second nurse at the bedside. Cooler window light."
+          />
+          <div className="mt-4 flex justify-end gap-2">
+            <Button variant="ghost" onClick={() => setEditOpen(false)}>
+              Cancel
+            </Button>
+            <Button disabled={busyEdit || !editNote.trim()} onClick={onEditStill}>
+              {busyEdit ? <Loader2 className="size-4 animate-spin" /> : <Wand2 className="size-4" />}
+              Apply edit
             </Button>
           </div>
         </DialogContent>
