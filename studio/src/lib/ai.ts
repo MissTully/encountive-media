@@ -50,9 +50,19 @@ function extractJson(text: string): unknown {
   return JSON.parse(text.slice(start, end + 1));
 }
 
+function readServerEnv(name: string): string | undefined {
+  // Bracket access so Vite cannot replace this with `undefined` at build time.
+  const env = (globalThis as { process?: { env?: Record<string, string | undefined> } })
+    .process?.env;
+  const value = env?.[name];
+  return typeof value === "string" && value.trim() ? value.trim() : undefined;
+}
+
 function requireApiKey(): string {
-  const apiKey = process.env.XAI_API_KEY?.trim();
-  if (!apiKey) throw new Error("Grok and Imagine are not available in this environment.");
+  const apiKey = readServerEnv("XAI_API_KEY") || readServerEnv("GROK_API_KEY");
+  if (!apiKey) {
+    throw new Error("Imagine is not connected on this live site yet.");
+  }
   return apiKey;
 }
 
