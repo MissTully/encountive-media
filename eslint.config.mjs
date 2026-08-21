@@ -12,6 +12,8 @@ const eslintConfig = defineConfig([
     "out/**",
     "build/**",
     "next-env.d.ts",
+    // TanStack Studio is a separate app (own package.json / Vercel project).
+    "studio/**",
   ]),
 ]);
 
