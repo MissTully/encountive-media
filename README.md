@@ -6,6 +6,15 @@ Version 1 produces **social-media image carousels** for internal use by Encounti
 > Working name. See [`docs/encountive-content-studio-build-spec.md`](docs/encountive-content-studio-build-spec.md)
 > for the full build specification (data model, workflows, constraints, scope).
 
+## Two apps in this repo
+
+| Path | Stack | Live |
+| --- | --- | --- |
+| **Repo root** | Next.js + Creatomate | [encountive-media.vercel.app](https://encountive-media.vercel.app) |
+| **[`studio/`](./studio)** | TanStack Start — mixer, LinkedIn / Instagram publish | New Vercel project `encountive-studio` (root directory `studio/`) |
+
+The Next.js production app is **not** replaced by Studio. Do not change the existing Vercel project's root directory.
+
 ## Stack
 
 - **Next.js** (App Router, TypeScript) + **Tailwind CSS**
@@ -63,6 +72,7 @@ src/
   proxy.ts             # keeps the Supabase auth session fresh on every request
   types/index.ts       # domain types mirroring the spec's data model
 docs/                  # build specification
+studio/                # Encountive Studio v1 (TanStack Start) — mixer + social publish
 ```
 
 ## Key constraints (from the spec)
