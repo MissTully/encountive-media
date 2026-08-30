@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { createFileRoute } from "@tanstack/react-router";
 import { Upload } from "lucide-react";
 import { toast } from "sonner";
@@ -7,22 +7,42 @@ import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { cn } from "@/lib/cn";
 import { useHydrated } from "@/hooks/use-hydrated";
+import { listSharedAssets } from "@/lib/shared-library";
 import { uid, useStudio } from "@/lib/store";
+import type { LibraryAsset } from "@/lib/types";
 
 export const Route = createFileRoute("/_studio/library")({
   component: LibraryPage,
 });
 
-const FILTERS = ["all", "still", "motion", "nursing", "hospital", "generated"] as const;
+const FILTERS = ["all", "still", "motion", "shared", "nursing", "hospital", "generated"] as const;
 
 function LibraryPage() {
   const hydrated = useHydrated();
-  const assets = useStudio((s) => s.assets);
+  const localAssets = useStudio((s) => s.assets);
   const addAsset = useStudio((s) => s.addAsset);
   const patchAsset = useStudio((s) => s.patchAsset);
   const [filter, setFilter] = useState<(typeof FILTERS)[number]>("all");
   const [active, setActive] = useState<string | null>(null);
 
+  // The shared Encountive image library (the media app's Supabase project) —
+  // one source of truth, read live. Empty when Supabase isn't configured.
+  const [shared, setShared] = useState<LibraryAsset[]>([]);
+  useEffect(() => {
+    let cancelled = false;
+    listSharedAssets()
+      .then((rows) => {
+        if (!cancelled) setShared(rows);
+      })
+      .catch(() => {
+        // Not configured or unreachable — the local library still works.
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  const assets = [...localAssets, ...shared];
   const shown = assets.filter((a) => {
     if (filter === "all") return true;
     if (filter === "still" || filter === "motion") return a.kind === filter;

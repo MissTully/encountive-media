@@ -1,12 +1,6 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
-  "framework": null,
+  "framework": "vite",
   "buildCommand": "node scripts/with-app-env.mjs vite build",
-  "installCommand": "npm install",
-  "functions": {
-    "api/**": {
-      "maxDuration": 60,
-      "memory": 1024
-    }
-  }
+  "installCommand": "npm install"
 }
