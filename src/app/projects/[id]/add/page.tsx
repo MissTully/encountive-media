@@ -31,6 +31,14 @@ export default async function AddImagesPage({
     .eq("status", "ready")
     .order("created_at", { ascending: false });
 
+  // Uploads that haven't finished the analysis workflow yet — surfaced so an
+  // empty picker doesn't read as "you have no images".
+  const { count: pendingCount } = await supabase
+    .from("assets")
+    .select("id", { count: "exact", head: true })
+    .in("status", ["uploaded", "analyzing"]);
+  const pending = pendingCount ?? 0;
+
   // Which assets are already on this board (so we can mark them).
   const { data: existing } = await supabase
     .from("project_assets")
@@ -70,17 +78,27 @@ export default async function AddImagesPage({
           </p>
         </header>
 
+        {pending > 0 && (
+          <p className="rounded-lg border border-blue-200 bg-blue-50 px-4 py-3 text-sm text-blue-900 dark:border-blue-900 dark:bg-blue-950 dark:text-blue-300">
+            {pending} image{pending === 1 ? "" : "s"}{" "}
+            {pending === 1 ? "is" : "are"} still waiting for analysis.
+            They&apos;ll appear here once the analysis workflow marks them
+            ready.
+          </p>
+        )}
+
         {items.length === 0 ? (
           <div className="flex flex-col items-center gap-3 rounded-xl border border-dashed border-zinc-300 py-20 text-center dark:border-zinc-700">
             <p className="text-zinc-600 dark:text-zinc-400">
-              No ready images yet — upload some and let the analysis workflow
-              process them first.
+              {pending > 0
+                ? "No images are ready to add yet."
+                : "No ready images yet — upload some and let the analysis workflow process them first."}
             </p>
             <Link
-              href="/upload"
+              href={pending > 0 ? "/library" : "/upload"}
               className="text-sm font-medium underline hover:text-zinc-800 dark:hover:text-zinc-300"
             >
-              Upload images
+              {pending > 0 ? "View asset library" : "Upload images"}
             </Link>
           </div>
         ) : (
